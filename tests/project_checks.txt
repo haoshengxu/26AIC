@@ -1,0 +1,14 @@
+PASS: TIM8 counter and 50 Hz period
+PASS: PC9 AF3 TIM8_CH4
+PASS: Servo writes CCR4
+PASS: Controller init before control IRQ
+PASS: Servo starts after centre initialization
+PASS: No early TIM7 start
+PASS: Fixed Ackermann selection
+PASS: SysTick preserved
+PASS: No remote overwrite after task completion
+PASS: M1 is 5000 ms
+PASS: CubeMX servo period synchronized
+PASS: All Keil source files exist
+PASS: Control module in Keil build
+PASS: UART priority above TIM7

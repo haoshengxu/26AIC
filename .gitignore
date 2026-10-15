@@ -1,0 +1,25 @@
+# Local editors and Keil workspace state
+.obsidian/
+.vscode/
+**/.vscode/
+*.uvguix.*
+*.uvoptx
+
+# Generated build products (release firmware is kept below)
+MDK-ARM/ACKERMANN_YAW/
+tests/build/
+__pycache__/
+*.pyc
+*.o
+*.d
+*.crf
+*.axf
+*.map
+*.lst
+*.htm
+*.lnp
+*.dep
+*.log
+*.bak
+*.tmp
+

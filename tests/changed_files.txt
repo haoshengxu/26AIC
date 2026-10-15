@@ -1,0 +1,24 @@
+ADD BALANCE/ackermann_config.h
+ADD BALANCE/ackermann_control.c
+ADD BALANCE/ackermann_control.h
+MODIFY BALANCE/balance.c
+MODIFY BALANCE/balance.h
+MODIFY BALANCE/mode_control.c
+MODIFY BALANCE/mode_control.h
+MODIFY BALANCE/show.c
+MODIFY BALANCE/system.c
+MODIFY BALANCE/system.h
+MODIFY Core/Inc/adc.h
+MODIFY Core/Src/adc.c
+MODIFY Core/Src/main.c
+MODIFY Core/Src/tim.c
+MODIFY Core/Src/usart.c
+MODIFY HARDWARE/gyro6.c
+MODIFY HARDWARE/usartx.c
+MODIFY SYSTEM/delay/delay.c
+RENAME AND MODIFY MDK-ARM/ACKERMANN_YAW.uvprojx
+RENAME MDK-ARM/ACKERMANN_YAW.uvoptx
+RENAME AND MODIFY ACKERMANN_YAW.ioc
+ADD README_阿克曼使用说明.md
+ADD tests/
+ADD firmware/

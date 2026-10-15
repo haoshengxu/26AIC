@@ -1,0 +1,11 @@
+Final Keil rebuild: 0 errors, 0 warnings.
+Firmware: ACKERMANN_YAW.hex / ACKERMANN_YAW.bin
+Intel HEX checksums: PASS
+HEX/BIN data equivalence: PASS
+Flash base: 0x08000000
+Initial stack: 0x20000F18
+Reset vector: 0x08000245
+BIN size: 25436 bytes
+Production-C ARM emulation: 12 cases, 482 assertions PASS
+Board/project static checks: 14 PASS
+Hardware flashing / on-vehicle tests: NOT PERFORMED
