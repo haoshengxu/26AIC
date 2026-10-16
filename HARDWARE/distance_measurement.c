@@ -83,6 +83,12 @@ uint8_t Distance_ProcessFrame(const uint8_t *frame, uint32_t now)
         Distance_FormatError();
         return 0U;
     }
+    /* Sender measures one edge, with -16 cm at lane center. Subtract that
+     * reference and retain the original wire polarity for tracking/OLED/VOFA.
+     * Invalid frames must remain zero. Use 32 bits before int16 saturation. */
+    signed_raw = frame[6] ? signed_raw - DISTANCE_CENTER_RAW : 0L;
+    if (signed_raw > 32767L) signed_raw = 32767L;
+    if (signed_raw < -32768L) signed_raw = -32768L;
     mask = __get_PRIMASK();
     __disable_irq();
     distance_latest.sequence = (uint16_t)(frame[4] | ((uint16_t)frame[5] << 8));

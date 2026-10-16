@@ -2,7 +2,7 @@
 
 当前为四模式版本：M1 定向行驶 5 秒、M2 转向 90°、M3 视觉 PD＋Stanley 循迹、M4 VOFA 手动调试与距离数据显示。
 
-- M1/M2 速度 0.3 m/s；M3 沿用 C30D 的 0.30 m/s；M4 两轮默认各 0.3 m/s。
+- M1/M2 速度 0.3 m/s；M3 沿用 C30D 的 0.25 m/s；M4 两轮默认各 0.3 m/s。
 - 所有模式的单轮目标速度上限 0.8 m/s。M4 VOFA 命令范围 ±0.8 m/s。
 - USART1 PA9/PA10 接 Jetson V2 距离；USART2 PA2/PA3 接 IMU；USART3 PC10/PC11 接 VOFA。
 - CubeMX 6.12.0：Demo1.ioc。Keil：MDK-ARM/Demo1.uvprojx。

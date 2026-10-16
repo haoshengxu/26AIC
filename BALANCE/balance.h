@@ -2,6 +2,7 @@
 #define __BALANCE_H
 #include "sys.h"
 #include "main.h"
+void Balance_TimerCallback(TIM_HandleTypeDef *htim);
 #include "system.h"
 #include "ackermann_config.h"
 

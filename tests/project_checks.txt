@@ -5,10 +5,16 @@ PASS: Controller init before control IRQ
 PASS: Servo starts after centre initialization
 PASS: No early TIM7 start
 PASS: Fixed Ackermann selection
-PASS: SysTick preserved
+PASS: HAL timebase moved to TIM6
 PASS: No remote overwrite after task completion
 PASS: M1 is 5000 ms
 PASS: CubeMX servo period synchronized
 PASS: All Keil source files exist
 PASS: Control module in Keil build
 PASS: UART priority above TIM7
+PASS: CubeMX CMSIS V2 and user code preservation enabled
+PASS: Generated task configuration matches IOC
+PASS: Task business logic survives regeneration
+PASS: Visual receiver starts after parser initialization
+PASS: Single HAL timer callback dispatches control
+PASS: Generated scheduler startup order

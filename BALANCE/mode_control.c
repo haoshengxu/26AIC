@@ -226,7 +226,7 @@ void ModeControl_Tick10ms(void)
         MOTOR_A.Target = Ack_Clamp(s_debug_left, -ACK_MAX_WHEEL_SPEED_MPS, ACK_MAX_WHEEL_SPEED_MPS);
         MOTOR_B.Target = Ack_Clamp(s_debug_right, -ACK_MAX_WHEEL_SPEED_MPS, ACK_MAX_WHEEL_SPEED_MPS);
         MOTOR_C.Target = MOTOR_D.Target = 0.0f;
-        Servo = Ack_ServoPulse(s_debug_angle * 0.01745329252f);
+        Servo = Ack_DebugServoPulse(s_debug_angle);
         return;
     }
     yaw = Gyro6_GetYaw();
@@ -344,7 +344,7 @@ uint8_t ModeControl_DebugCommand(const char *key, float value)
         return ModeControl_IsActive();
     }
     if (!strcmp(key, "A")) {
-        if (!(value >= -20.0f && value <= 20.0f)) return 0;
+        if (!(value >= ACK_DEBUG_MIN_ANGLE_DEG && value <= ACK_DEBUG_MAX_ANGLE_DEG)) return 0;
         s_debug_angle = value;
         return 1;
     }

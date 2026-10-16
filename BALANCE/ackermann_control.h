@@ -19,5 +19,6 @@ void Ack_YawReset(AckYawPID *pid, float initial_error);
 float Ack_YawUpdate(AckYawPID *pid, float target_deg, float current_deg);
 void Ack_Kinematics(float speed, float steer_rad, float *left, float *right);
 int Ack_ServoPulse(float steer_rad);
+int Ack_DebugServoPulse(float angle_deg);
 
 #endif

@@ -3,6 +3,8 @@
 #include <stdint.h>
 
 #define DISTANCE_TIMEOUT_MS 250U
+/* Vision edge-distance at lane center: -16.00 cm in 0.01 cm wire units. */
+#define DISTANCE_CENTER_RAW (-1600L)
 typedef enum {
     DISTANCE_WAIT = 0,
     DISTANCE_VALID,
@@ -12,7 +14,7 @@ typedef enum {
 } DistanceState;
 
 typedef struct {
-    int16_t distance_raw; /* 0.01 cm, right positive; zeroed when unusable. */
+    int16_t distance_raw; /* Center-relative error, 0.01 cm, right positive. */
     uint16_t sequence;
     uint8_t measurement_valid, link_alive, has_frame;
     DistanceState state;

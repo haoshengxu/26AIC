@@ -3,15 +3,17 @@
 #include "ackermann_config.h"
 
 /* User-selected VOFA defaults; runtime changes reset to these on reboot. */
-#define TRACK_BASE_SPEED_MPS        0.30f
-#define TRACK_KP                    1.0f   /* rad / m */
-#define TRACK_KD                    0.04f  /* rad s / m */
+#define TRACK_BASE_SPEED_MPS        0.25f
+#define TRACK_KP                    5.45f   /* rad / m */
+#define TRACK_KD                    0.30f  /* rad s / m */
 #define TRACK_STANLEY_K             0.6f   /* 1 / s */
 #define TRACK_MIN_SPEED_MPS         0.10f  /* denominator floor */
 #define TRACK_D_FILTER_TAU_S        0.08f  /* 0 = unfiltered finite difference */
 #define TRACK_D_LIMIT_MPS           2.0f
 #define TRACK_STEER_LIMIT_RAD       ACK_MAX_STEER_RAD
-/* V2 q>0: road is right of camera -> car is left of road -> e>0. */
+/* Normalized q>0: road right of camera -> car left of road -> e>0.
+ * Edge-distance center reference is subtracted without reversing wire sign
+ * in Distance_ProcessFrame(). */
 #define TRACK_ERROR_SIGN            1.0f
 /* Formula uses right-positive correction; chassis uses LEFT-positive steer. */
 #define TRACK_TO_CHASSIS_SIGN       (-1.0f)

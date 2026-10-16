@@ -1,0 +1,23 @@
+PASS: SVC_Handler linked into vector table
+PASS: PendSV_Handler linked into vector table
+PASS: SysTick_Handler linked into vector table
+PASS: SVC/PendSV are substantive port handlers
+PASS: Application stacks each 3 KiB
+PASS: CMSIS dynamic heap available for future objects
+PASS: SysTick scheduler state 1: HAL untouched, RTOS gated
+PASS: SysTick scheduler state 2: HAL untouched, RTOS gated
+PASS: SysTick scheduler state 0: HAL untouched, RTOS gated
+PASS: CubeMX creates both configured static tasks
+PASS: Separate task stacks and control blocks
+PASS: Task creation failure reaches motor stop path
+PASS: Timer callback 0x40001000 routes HAL tick correctly
+PASS: Timer callback 0x40001400 routes HAL tick correctly
+PASS: StartVofaTask performs work then blocks
+PASS: StartVofaTask records stack headroom
+PASS: StartDisplayTask performs work then blocks
+PASS: StartDisplayTask records stack headroom
+PASS: RTOS assertion reaches stop path and records line
+PASS: Stack overflow reaches stop path
+PASS: Millisecond delay uses correct clock before/after scheduler (1)
+PASS: Millisecond delay uses correct clock before/after scheduler (2)
+PASS: Idle task has valid static TCB and 1 KiB stack

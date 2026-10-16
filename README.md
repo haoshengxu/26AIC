@@ -2,6 +2,8 @@
 
 STM32F407VET6，CubeMX 6.12.0，Keil ARMCC 5。
 
+已接入由 CubeMX 管理的 FreeRTOS V10.3.1 / CMSIS-RTOS V2：VOFA 和显示分别运行于独立任务，电机控制保留 TIM7 的 100 Hz 中断周期。详见 [FreeRTOS 架构与使用说明](README_FreeRTOS.md)。
+
 - M1：保持启动航向前进 5 秒，0.3 m/s。
 - M2：前进转向 90°，0.3 m/s。
 - M3：Jetson V2 距离输入，PD＋Stanley 循迹，VOFA 在线调参。
@@ -12,9 +14,9 @@ STM32F407VET6，CubeMX 6.12.0，Keil ARMCC 5。
 
 | 参数 | 默认值 |
 |---|---:|
-| 循迹速度 | 0.30 m/s |
-| Kp | 1.0 |
-| Kd | 0.04 |
+| 循迹速度 | 0.25 m/s |
+| Kp | 5.45 |
+| Kd | 0.30 |
 | Stanley k | 0.6 |
 | 微分滤波时间常数 | 0.08 s |
 
@@ -36,4 +38,4 @@ STM32F407VET6，CubeMX 6.12.0，Keil ARMCC 5。
 
 Keil 编译与实际 C 源码仿真已验证；测试脚本位于 `tests`，需要 Keil ARMCC 5、Python 和 unicorn 2.1.4。测试不代替实车调参、相机标定与串口联调。
 
-工程包含手工维护的外设初始化代码，CubeMX 重新生成前需备份并核对串口接收及定时器启动逻辑。历史说明与当前参数冲突时，以本页和源码为准。
+CubeMX 已能配置任务并重新生成代码；业务逻辑放在 USER CODE 区，需保留 Keil 自定义源码组及包含路径。历史说明与当前参数冲突时，以本页和源码为准。

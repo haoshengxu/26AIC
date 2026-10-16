@@ -39,7 +39,7 @@ int Incremental_PI_B(float encoder, float target)
                                 MOTOR_B.Velocity_KP, MOTOR_B.Velocity_KI);
 }
 
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+void Balance_TimerCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance != TIM7) return;
     Get_Velocity_Form_Encoder();
@@ -76,7 +76,8 @@ void Set_Pwm(int motor_a, int motor_b, int motor_c, int motor_d, int servo)
     /* C/D are unused on the two-drive-wheel chassis. */
     PWMC1 = ACK_MOTOR_PWM_TOP; PWMC2 = ACK_MOTOR_PWM_TOP;
     PWMD1 = ACK_MOTOR_PWM_TOP; PWMD2 = ACK_MOTOR_PWM_TOP;
-    Servo_PWM = target_limit_int(servo, ACK_SERVO_MIN_US, ACK_SERVO_MAX_US);
+    /* Permit M4's calibration pulses through the final hardware clamp. */
+    Servo_PWM = target_limit_int(servo, ACK_DEBUG_SERVO_MIN_US, ACK_DEBUG_SERVO_MAX_US);
 }
 
 u8 Turn_Off(float voltage)

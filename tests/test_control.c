@@ -77,7 +77,7 @@ static void advance(unsigned int milliseconds)
     for (i = 0; i < milliseconds; i += 10U) {
         now_ms += 10U;
         if (send_imu) feed_yaw(simulated_yaw);
-        HAL_TIM_PeriodElapsedCallback(&timer);
+        Balance_TimerCallback(&timer);
     }
 }
 static void reset_board(uint32_t time, float yaw)
@@ -255,7 +255,7 @@ void test_entry(void)
     s_valid = 0; send_imu = 0;
     REQUIRE(ModeControl_DebugCommand("RUN", 1.0f));
     advance(10);
-    REQUIRE(MOTOR_A.Target == ACK_DEBUG_DEFAULT_SPEED_MPS && MOTOR_B.Target == ACK_DEBUG_DEFAULT_SPEED_MPS && Servo == 1500);
+    REQUIRE(MOTOR_A.Target == ACK_DEBUG_DEFAULT_SPEED_MPS && MOTOR_B.Target == ACK_DEBUG_DEFAULT_SPEED_MPS && Servo == 1538);
     REQUIRE(ModeControl_DebugCommand("L", 0.2f));
     REQUIRE(ModeControl_DebugCommand("R", -0.1f));
     REQUIRE(ModeControl_DebugCommand("A", 10.0f));
@@ -265,10 +265,10 @@ void test_entry(void)
     advance(16000);
     REQUIRE(ModeControl_IsActive());
     REQUIRE(!ModeControl_DebugCommand("L", 11.0f));
-    REQUIRE(!ModeControl_DebugCommand("A", 21.0f));
+    REQUIRE(!ModeControl_DebugCommand("A", 28.0f));
     REQUIRE(!ModeControl_DebugCommand("M", 2.5f));
     REQUIRE(ModeControl_DebugCommand("RUN", 0.0f));
-    REQUIRE(MOTOR_A.Target == 0.0f && Servo == 1500 && !ModeControl_IsActive());
+    REQUIRE(MOTOR_A.Target == 0.0f && Servo == 1538 && !ModeControl_IsActive());
     REQUIRE(ModeControl_DebugCommand("RUN", 1.0f));
     Voltage = 9.0f; advance(10);
     REQUIRE(ModeControl_GetStatus() == MODE_STATUS_POWER_ERROR);

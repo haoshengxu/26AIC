@@ -1,5 +1,7 @@
 #include "delay.h"
 #include "stm32f4xx_hal.h"
+#include "FreeRTOS.h"
+#include "task.h"
 
 /* Preserve the HAL 1 ms SysTick. The legacy delay rewrote LOAD/CTRL and
  * stopped SysTick, breaking button debounce, timeouts and HAL_GetTick(). */
@@ -25,5 +27,11 @@ void delay_us(u32 nus)
 
 void delay_ms(u16 nms)
 {
-    HAL_Delay(nms);
+    if (__get_IPSR() == 0U && xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
+        /* Round up one tick so this remains a minimum delay. */
+        vTaskDelay(pdMS_TO_TICKS(nms) + 1U);
+    } else {
+        /* Initialization only; blocking delays must not be used in ISRs. */
+        HAL_Delay(nms);
+    }
 }

@@ -87,3 +87,12 @@ int Ack_ServoPulse(float steer_rad)
     pulse = ACK_SERVO_CENTER_US + ACK_SERVO_DIRECTION * ACK_SERVO_US_PER_RAD * steer_rad;
     return (int)(Ack_Clamp(pulse, ACK_SERVO_MIN_US, ACK_SERVO_MAX_US) + 0.5f);
 }
+
+int Ack_DebugServoPulse(float angle_deg)
+{
+    float pulse;
+    angle_deg = Ack_Clamp(angle_deg, ACK_DEBUG_MIN_ANGLE_DEG, ACK_DEBUG_MAX_ANGLE_DEG);
+    pulse = ACK_SERVO_CENTER_US + ACK_SERVO_DIRECTION * ACK_SERVO_US_PER_RAD *
+            angle_deg * 0.01745329252f;
+    return (int)(Ack_Clamp(pulse, ACK_DEBUG_SERVO_MIN_US, ACK_DEBUG_SERVO_MAX_US) + 0.5f);
+}

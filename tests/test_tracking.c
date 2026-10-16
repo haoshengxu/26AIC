@@ -28,7 +28,7 @@ void test_entry(void)
     unsigned int i;
     case_id=1;reset(); Tracking_Reset(&controller,&out);
     solve(&controller,&out,200,0,0.20f,1,80.0f);
-    expected=0.02f+atanf(0.6f*0.02f/0.2f);
+    expected=5.45f*0.02f+atanf(0.6f*0.02f/0.2f);
     REQUIRE(NEAR(out.error_m,0.02f) && out.derivative_mps==0);
     REQUIRE(NEAR(out.correction_right_rad,expected));
     REQUIRE(NEAR(out.steer_left_rad,-expected) && !out.heading_used);
@@ -36,8 +36,8 @@ void test_entry(void)
     case_id=2; now_ms=20;
     solve(&controller,&out,300,1,0.20f,0,0);
     REQUIRE(NEAR(out.derivative_mps,0.1f)); /* .5 m/s * .02/(.08+.02). */
-    REQUIRE(NEAR(out.d_rad,0.004f));
-    REQUIRE(NEAR(out.steer_left_rad,-(0.03f+0.004f+atanf(0.09f))));
+    REQUIRE(NEAR(out.d_rad,0.03f));
+    REQUIRE(NEAR(out.steer_left_rad,-(5.45f*0.03f+0.03f+atanf(0.09f))));
     Tracking_GetInput(&in); saved=out.derivative_mps; now_ms=30;
     REQUIRE(Tracking_Update(&controller,&in,now_ms,0.20f,0,0,&out));
     REQUIRE(out.derivative_mps==saved); /* No new packet -> no repeated differentiation. */
@@ -52,8 +52,8 @@ void test_entry(void)
     REQUIRE(NEAR(out.denominator_mps,0.1f));
     REQUIRE(NEAR(out.steer_left_rad,-0.35f));
     Tracking_Reset(&controller,&out);
-    solve(&controller,&out,-32768,1,-0.0f,0,0);
-    REQUIRE(NEAR(out.error_m,-3.2768f) && NEAR(out.steer_left_rad,0.35f));
+    solve(&controller,&out,-32767,1,-0.0f,0,0);
+    REQUIRE(NEAR(out.error_m,-3.1168f) && NEAR(out.steer_left_rad,0.35f));
     Tracking_Reset(&controller,&out);
     solve(&controller,&out,0,2,0,0,0); REQUIRE(out.steer_left_rad==0);
     REQUIRE(Ack_ServoPulse(out.steer_left_rad)==ACK_SERVO_CENTER_US);

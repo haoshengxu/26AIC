@@ -68,7 +68,7 @@ static void advance(unsigned int ms)
     for(i=0;i<ms;i+=10U) {
         now_ms+=10U;
         if(send_imu) yaw_frame(simulated_yaw);
-        HAL_TIM_PeriodElapsedCallback(&t);
+        Balance_TimerCallback(&t);
     }
 }
 static void reset(void)
@@ -95,13 +95,21 @@ static void feed(uint16_t seq, int16_t v, int16_t s, uint8_t flags)
     uint8_t f[14],i;make(f,seq,v,s,flags);
     for(i=0;i<14;i++) Vision_ProcessByte(f[i]);
 }
-static void feed_distance(uint16_t seq, int16_t raw, uint8_t valid)
+static void feed_wire_distance(uint16_t seq, int16_t raw, uint8_t valid)
 {
     uint8_t f[14],j;
     uint16_t crc;
     make(f,seq,0,raw,valid); f[2]=2;
     crc=Vision_Crc16(f,12); f[12]=(uint8_t)crc; f[13]=(uint8_t)(crc>>8);
     for(j=0;j<14;j++) Vision_ProcessByte(f[j]);
+}
+/* Scenarios specify desired center-relative error in original polarity. */
+static void feed_distance(uint16_t seq, int16_t relative, uint8_t valid)
+{
+    int32_t wire = valid ? -1600L + relative : 0;
+    if (wire < -32768L) wire = -32768L;
+    if (wire > 32767L) wire = 32767L;
+    feed_wire_distance(seq, (int16_t)wire, valid);
 }
 static void press(void) { user_key=GPIO_PIN_RESET;advance(60);user_key=GPIO_PIN_SET;advance(100); }
 static void single(void) { press();advance(310); }
@@ -191,5 +199,24 @@ void test_entry(void)
     case_id=20;start_m3();feed_distance(1,0,1);advance(10);
     for(i=0;i<22;i++) {feed_distance(1,0,1);advance(10);}
     REQUIRE(s_status==MODE_STATUS_LINK_ERROR); /* Replay cannot refresh heartbeat. */
+    case_id=21;reset();
+    {
+        DistanceMeasurement d;
+        TrackingInput input;
+        feed_wire_distance(1,-1400,1);Distance_Get(&d);Tracking_GetInput(&input);
+        REQUIRE(d.distance_raw==200 && input.distance_raw==200);
+        feed_wire_distance(2,-1800,1);Distance_Get(&d);Tracking_GetInput(&input);
+        REQUIRE(d.distance_raw==-200 && input.distance_raw==-200);
+        feed_wire_distance(3,-32768,1);Distance_Get(&d);Tracking_GetInput(&input);
+        REQUIRE(d.distance_raw==-31168 && input.distance_raw==-31168);
+        feed_wire_distance(4,32767,1);Distance_Get(&d);
+        REQUIRE(d.distance_raw==32767);
+        feed_wire_distance(5,-1600,1);Distance_Get(&d);
+        REQUIRE(d.distance_raw==0 && d.measurement_valid);
+        feed_wire_distance(6,0,1);Distance_Get(&d);
+        REQUIRE(d.distance_raw==1600 && d.measurement_valid);
+        feed_wire_distance(7,0,0);Distance_Get(&d);Tracking_GetInput(&input);
+        REQUIRE(d.distance_raw==0 && !d.measurement_valid && !input.valid);
+    }
     finish(0);
 }

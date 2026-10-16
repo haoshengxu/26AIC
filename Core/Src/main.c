@@ -6,7 +6,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2025 STMicroelectronics.
+  * Copyright (c) 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 #include "adc.h"
 #include "tim.h"
 #include "usart.h"
@@ -29,6 +30,7 @@
 #include "ackermann_config.h"
 #include "vofa_debug.h"
 #include "vision_command.h"
+
 
 /* USER CODE END Includes */
 
@@ -55,6 +57,7 @@
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+void MX_FREERTOS_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -105,11 +108,12 @@ int main(void)
   MX_TIM10_Init();
   MX_TIM11_Init();
   MX_USART2_UART_Init();
-  MX_USART3_UART_Init();
-  Vision_Init();
-  MX_USART1_UART_Init();
   MX_TIM7_Init();
+  MX_USART3_UART_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+  Vision_Init();
+  if (HAL_UART_Receive_IT(&huart1, Usart1_Receive_buf, 1U) != HAL_OK) Error_Handler();
 	delay_init();
 	OLED_Init();
 	/* Dedicated Ackermann chassis: never select geometry with the ADC knob. */
@@ -126,14 +130,25 @@ int main(void)
 	__HAL_TIM_SET_COUNTER(&htim7, 0U);
 	__HAL_TIM_CLEAR_FLAG(&htim7, TIM_FLAG_UPDATE);
 	if (HAL_TIM_Base_Start_IT(&htim7) != HAL_OK) Error_Handler();
+
   /* USER CODE END 2 */
+
+  /* Init scheduler */
+  osKernelInitialize();
+
+  /* Call init function for freertos objects (in cmsis_os2.c) */
+  MX_FREERTOS_Init();
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  Error_Handler(); /* A running scheduler must never return. */
   while (1)
   {
-		Vofa_Task();
-		show_task();	
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -165,7 +180,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLM = 4;
   RCC_OscInitStruct.PLL.PLLN = 168;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-  RCC_OscInitStruct.PLL.PLLQ = 7; /* 336 MHz / 7 = 48 MHz */
+  RCC_OscInitStruct.PLL.PLLQ = 7;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -191,6 +206,27 @@ void SystemClock_Config(void)
 /* USER CODE END 4 */
 
 /**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM6 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  /* USER CODE BEGIN Callback 0 */
+
+  /* USER CODE END Callback 0 */
+  if (htim->Instance == TIM6) {
+    HAL_IncTick();
+  }
+  /* USER CODE BEGIN Callback 1 */
+  Balance_TimerCallback(htim);
+  /* USER CODE END Callback 1 */
+}
+
+/**
   * @brief  This function is executed in case of error occurrence.
   * @retval None
   */
@@ -199,9 +235,9 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   /* Halt drive outputs even if an error occurs after PWM was started. */
+  __disable_irq();
   PWMA1 = 0; PWMA2 = 0; PWMB1 = 0; PWMB2 = 0;
   PWMC1 = 0; PWMC2 = 0; PWMD1 = 0; PWMD2 = 0;
-  __disable_irq();
   while (1)
   {
   }

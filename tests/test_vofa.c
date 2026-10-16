@@ -35,15 +35,23 @@ void test_entry(void)
     receive_text("M=4;V=0.3;A=0;RUN=1;");
     advance(10);
     REQUIRE(accepted == 4 && rejected == 0 && ModeControl_IsActive());
-    REQUIRE(MOTOR_A.Target == 0.3f && MOTOR_B.Target == 0.3f && Servo == 1500);
+    REQUIRE(MOTOR_A.Target == 0.3f && MOTOR_B.Target == 0.3f && Servo == 1538);
     receive_text("L=0.");
     REQUIRE(ModeControl_DebugLeft() == 0.3f);
     receive_text("25\r\nR=-0.2;A=10;"); advance(10);
     REQUIRE(MOTOR_A.Target == 0.25f && MOTOR_B.Target == -0.2f);
+    receive_text("A=27;"); advance(10);
+    REQUIRE(ModeControl_DebugAngle()==27.0f && Servo==1020 && Servo_PWM==1020);
+    receive_text("A=-27;"); advance(10);
+    REQUIRE(ModeControl_DebugAngle()==-27.0f && Servo==2056 && Servo_PWM==2056);
+    REQUIRE(!ModeControl_DebugCommand("A",27.1f) && ModeControl_DebugAngle()==-27.0f);
+    REQUIRE(!ModeControl_DebugCommand("A",-27.1f) && ModeControl_DebugAngle()==-27.0f);
+    REQUIRE(Ack_ServoPulse(1.0f)==Ack_ServoPulse(ACK_MAX_STEER_RAD));
+    receive_text("A=10;"); advance(10);
     receive_text("A=nan;V=inf;L=12;R=2junk;BAD=1;M=2.5;=2;");
     REQUIRE(rejected == 7 && MOTOR_A.Target == 0.25f);
     receive_text("RUN=0;");
-    REQUIRE(!ModeControl_IsActive() && Servo == 1500);
+    REQUIRE(!ModeControl_IsActive() && Servo == 1538);
     case_id = 2;
     for (j = 0; j < 60; ++j) { rx_byte = 'X'; Vofa_RxComplete(); }
     receive_text("RUN=1;V=0.2;");
@@ -55,6 +63,7 @@ void test_entry(void)
     receive_text("RUN="); Vofa_RxError(); Vofa_Task();
     receive_text("1;A=0;"); REQUIRE(!ModeControl_IsActive());
     case_id = 3;
+    tx_count = 0; /* Earlier endpoint checks also advance the telemetry clock. */
     huart3.gState = HAL_UART_STATE_READY;
     now_ms = 100; MOTOR_A.Encoder = 1.5f; MOTOR_B.Encoder = -0.5f;
     Vofa_Task();
@@ -67,7 +76,7 @@ void test_entry(void)
     huart3.gState = HAL_UART_STATE_READY; Vofa_Task();
     REQUIRE(tx_count == 2 && frame.channels[0] == 9 && irq_mask == 0);
     {
-        uint8_t distance_frame[14] = {0xAA,0x55,2,14,1,0,1,0,0,0,0xD2,4,0,0};
+        uint8_t distance_frame[14] = {0xAA,0x55,2,14,1,0,1,0,0,0,0x92,0xFE,0,0};
         uint16_t crc = Vision_Crc16(distance_frame,12);
         distance_frame[12]=(uint8_t)crc; distance_frame[13]=(uint8_t)(crc>>8);
         for(j=0;j<14;j++) Vision_ProcessByte(distance_frame[j]);
@@ -86,7 +95,7 @@ void test_entry(void)
     advance(10);
     REQUIRE(ModeControl_GetStatus()==MODE_STATUS_WAIT_COMMAND);
     {
-        uint8_t f[14]={0xAA,0x55,2,14,2,0,1,0,0,0,100,0,0,0};
+        uint8_t f[14]={0xAA,0x55,2,14,2,0,1,0,0,0,0x24,0xFA,0,0};
         uint16_t crc=Vision_Crc16(f,12);
         TrackingOutput out;
         TrackingParameters p;
