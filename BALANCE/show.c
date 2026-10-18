@@ -82,65 +82,24 @@ static void TrackingNumber(char *dst, float value, unsigned int digits)
 
 static void ShowTracking(void)
 {
-    TrackingParameters params;
-    TrackingInput input;
+    VisionTarget target;
     TrackingOutput out;
-    uint32_t now, age, mask;
-    int lt, rt, pulse;
-    uint8_t available;
     char line[48], a[16], b[16];
-    const char *status;
-    mask = __get_PRIMASK();
-    __disable_irq();
-    Tracking_GetInput(&input);
-    Tracking_GetParameters(&params);
+    Vision_GetTarget(&target);
     ModeControl_GetTrackingOutput(&out);
-    now = HAL_GetTick();
-    status = StatusText();
-    lt = (int)(MOTOR_A.Target * 1000.0f);
-    rt = (int)(MOTOR_B.Target * 1000.0f);
-    pulse = Servo;
-    __set_PRIMASK(mask);
-    available = Tracking_CanRun(&input, now);
-    if ((now / 3000U) % 2U == 0U) {
-        age = input.valid ? now - input.received_ms : 999U;
-        if (age > 999U) age = 999U;
-        snprintf(line, sizeof(line), "M3 %-5s H:%u A:%lu", status,
-                 (unsigned int)out.heading_used, (unsigned long)age);
-        ShowLine(0U, line);
-        if (available) TrackingNumber(a, TRACK_ERROR_SIGN * input.distance_raw * 0.0001f, 4U);
-        else strcpy(a, "---");
-        TrackingNumber(b, out.measured_speed_mps, 3U);
-        snprintf(line, sizeof(line), "e:%sm v:%s", a, b);
-        ShowLine(OLED_TEXT_HEIGHT, line);
-        TrackingNumber(a, out.derivative_mps, 3U);
-        snprintf(line, sizeof(line), "de:%sm/s", a);
-        ShowLine(2U * OLED_TEXT_HEIGHT, line);
-        TrackingNumber(a, out.steer_left_rad, 3U);
-        snprintf(line, sizeof(line), "ANG:%srad S:%d", a, pulse);
-        ShowLine(3U * OLED_TEXT_HEIGHT, line);
-        snprintf(line, sizeof(line), "L:%+4d R:%+4d mm/s", lt, rt);
-        ShowLine(4U * OLED_TEXT_HEIGHT, line);
-    } else {
-        snprintf(line, sizeof(line), "M3 %-5s H:%u PARAM", status, (unsigned int)out.heading_used);
-        ShowLine(0U, line);
-        TrackingNumber(a, params.kp, 2U);
-        TrackingNumber(b, params.kd, 2U);
-        snprintf(line, sizeof(line), "Kp:%s Kd:%s", a, b);
-        ShowLine(OLED_TEXT_HEIGHT, line);
-        TrackingNumber(a, params.stanley_k, 2U);
-        TrackingNumber(b, params.speed_mps, 2U);
-        snprintf(line, sizeof(line), "k:%s v0:%s", a, b);
-        ShowLine(2U * OLED_TEXT_HEIGHT, line);
-        TrackingNumber(a, out.p_rad, 3U);
-        TrackingNumber(b, out.d_rad, 3U);
-        snprintf(line, sizeof(line), "P:%s D:%s", a, b);
-        ShowLine(3U * OLED_TEXT_HEIGHT, line);
-        TrackingNumber(a, out.stanley_rad, 3U);
-        TrackingNumber(b, out.heading_rad, 3U);
-        snprintf(line, sizeof(line), "ST:%s H:%s", a, b);
-        ShowLine(4U * OLED_TEXT_HEIGHT, line);
-    }
+    snprintf(line, sizeof(line), "M3 PP %-5s V:%u", StatusText(), (unsigned int)target.valid);
+    ShowLine(0U, line);
+    TrackingNumber(a, target.x_centi_cm*0.0001f, 3U);
+    TrackingNumber(b, target.y_centi_cm*0.0001f, 3U);
+    snprintf(line, sizeof(line), "X:%s Y:%s m", a, b);
+    ShowLine(OLED_TEXT_HEIGHT, line);
+    TrackingNumber(a, out.steer_left_rad*57.2957795f, 2U);
+    snprintf(line, sizeof(line), "ANG:%s S:%d", a, Servo);
+    ShowLine(2U*OLED_TEXT_HEIGHT, line);
+    snprintf(line, sizeof(line), "L:%+4d R:%+4d mm/s", (int)(MOTOR_A.Target*1000), (int)(MOTOR_B.Target*1000));
+    ShowLine(3U*OLED_TEXT_HEIGHT, line);
+    snprintf(line, sizeof(line), "SEQ:%u LINK:%u", (unsigned int)target.sequence, (unsigned int)target.link_alive);
+    ShowLine(4U*OLED_TEXT_HEIGHT, line);
     OLED_Refresh_Gram();
 }
 

@@ -1,3 +1,5 @@
+> 当前M3已改为V3后轴XY纯追踪。旧V2/PD/Stanley控制说明为历史记录，当前启停与VOFA通道见 [README_V3接收.md](README_V3接收.md)。
+
 # M3：VOFA 在线循迹调试
 
 ## 连接

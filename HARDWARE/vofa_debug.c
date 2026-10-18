@@ -3,6 +3,8 @@
 #include "balance.h"
 #include "mode_control.h"
 #include "distance_measurement.h"
+#include "vision_command.h"
+#include <math.h>
 #include <string.h>
 
 #define RX_SIZE 256U
@@ -80,8 +82,7 @@ static void ExecuteCommand(void)
 
 void Vofa_Task(void)
 {
-    DistanceMeasurement distance;
-    TrackingInput tracking;
+    VisionTarget target;
     TrackingOutput output;
     TrackingParameters params;
     unsigned int budget = RX_SIZE;
@@ -132,30 +133,34 @@ void Vofa_Task(void)
     frame.channels[11] = ModeControl_DebugAngle();
     frame.channels[12] = accepted;
     frame.channels[13] = rejected;
-    Distance_Get(&distance);
-    Tracking_GetInput(&tracking);
+    Vision_GetTarget(&target);
     ModeControl_GetTrackingOutput(&output);
     now = HAL_GetTick();
-    frame.channels[14] = distance.measurement_valid ? distance.distance_raw * 0.01f : 0.0f;
-    frame.channels[15] = (float)distance.state;
-    frame.channels[16] = (float)distance.measurement_valid;
-    frame.channels[17] = (float)distance.sequence;
-    frame.channels[18] = distance.has_frame ? (float)(uint32_t)(now-distance.received_ms) : -1.0f;
-    frame.channels[19] = output.error_m;
+    frame.channels[14] = target.x_centi_cm * 0.01f;
+    frame.channels[15] = !target.has_frame ? 0.0f : !target.link_alive ? 3.0f : target.valid ? 1.0f : 2.0f;
+    frame.channels[16] = target.valid;
+    frame.channels[17] = target.sequence;
+    frame.channels[18] = target.has_frame ? (float)(uint32_t)(now-target.received_ms) : -1.0f;
+    frame.channels[19] = -target.x_centi_cm * 0.0001f;
     frame.channels[20] = output.steer_left_rad * 57.2957795f;
-    frame.channels[21] = (float)Tracking_CanRun(&tracking, now);
+    frame.channels[21] = target.valid;
     Tracking_GetParameters(&params);
-    frame.channels[22] = output.derivative_mps;
-    frame.channels[23] = output.p_rad * 57.2957795f;
-    frame.channels[24] = output.d_rad * 57.2957795f;
-    frame.channels[25] = output.stanley_rad * 57.2957795f;
-    frame.channels[26] = output.heading_rad * 57.2957795f;
+    frame.channels[22] = target.y_centi_cm * 0.01f;
+    {
+        float x = target.x_centi_cm * 0.0001f;
+        float y = target.y_centi_cm * 0.0001f;
+        float d2 = x*x+y*y;
+        frame.channels[23] = sqrtf(d2);
+        frame.channels[24] = target.valid && d2 > 0.0f ? -2.0f*x/d2 : 0.0f;
+        frame.channels[25] = atanf(ACK_WHEELBASE_M*frame.channels[24])*57.2957795f;
+    }
+    frame.channels[26] = target.link_alive;
     frame.channels[27] = 0.5f * (MOTOR_A.Encoder + MOTOR_B.Encoder);
     frame.channels[28] = params.speed_mps;
-    frame.channels[29] = params.kp;
-    frame.channels[30] = params.kd;
-    frame.channels[31] = params.stanley_k;
-    frame.channels[32] = params.filter_tau_s;
+    frame.channels[29] = 0.0f;
+    frame.channels[30] = 0.0f;
+    frame.channels[31] = 0.0f;
+    frame.channels[32] = 0.0f;
     frame.channels[33] = output.valid &&
         (output.correction_right_rad >= TRACK_STEER_LIMIT_RAD ||
          output.correction_right_rad <= -TRACK_STEER_LIMIT_RAD) ? 1.0f : 0.0f;

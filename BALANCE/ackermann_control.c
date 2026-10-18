@@ -80,6 +80,19 @@ void Ack_Kinematics(float speed, float steer_rad, float *left, float *right)
     }
 }
 
+int Ack_PurePursuit(float x_right_m, float y_forward_m, float *steer_left_rad)
+{
+    float distance2 = x_right_m*x_right_m + y_forward_m*y_forward_m;
+    *steer_left_rad = 0.0f;
+    /* Comparisons also reject NaN/Inf; avoid a near-origin singularity. */
+    if (!(y_forward_m > 0.0f && y_forward_m <= 3.2767f &&
+          x_right_m >= -3.2768f && x_right_m <= 3.2767f &&
+          distance2 >= ACK_PP_MIN_LOOKAHEAD_M*ACK_PP_MIN_LOOKAHEAD_M)) return 0;
+    *steer_left_rad = Ack_Clamp(atanf(-2.0f*ACK_WHEELBASE_M*x_right_m/distance2),
+                                -ACK_MAX_STEER_RAD, ACK_MAX_STEER_RAD);
+    return 1;
+}
+
 int Ack_ServoPulse(float steer_rad)
 {
     float pulse;

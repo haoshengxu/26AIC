@@ -8,6 +8,7 @@
  * The UART ISR is the sole writer. Readers briefly mask interrupts to obtain
  * a consistent command and counters. No floats, prints or motor writes here. */
 static volatile VisionCommand latest;
+static volatile VisionTarget target_latest;
 static uint8_t buffer[VISION_FRAME_SIZE], used;
 
 uint16_t Vision_Crc16(const uint8_t *data, uint16_t length)
@@ -25,6 +26,7 @@ uint16_t Vision_Crc16(const uint8_t *data, uint16_t length)
 void Vision_Init(void)
 {
     memset((void *)&latest, 0, sizeof(latest));
+    memset((void *)&target_latest, 0, sizeof(target_latest));
     used = 0U;
     Distance_Init();
 }
@@ -37,6 +39,59 @@ void Vision_Get(VisionCommand *out)
     __set_PRIMASK(mask);
 }
 
+void Vision_GetTarget(VisionTarget *out)
+{
+    uint32_t mask = __get_PRIMASK();
+    __disable_irq();
+    if (target_latest.link_alive &&
+        (uint32_t)(HAL_GetTick() - target_latest.received_ms) >= VISION_TARGET_TIMEOUT_MS) {
+        target_latest.link_alive = 0U;
+        target_latest.valid = 0U;
+        target_latest.x_centi_cm = target_latest.y_centi_cm = 0;
+        ++target_latest.timeouts;
+    }
+    *out = target_latest;
+    __set_PRIMASK(mask);
+}
+
+static uint8_t ParseTarget(uint32_t now)
+{
+    uint16_t seq, delta, ux, uy;
+    int32_t x, y;
+    uint16_t crc = (uint16_t)(buffer[12] | ((uint16_t)buffer[13] << 8));
+    if (Vision_Crc16(buffer, 12U) != crc) {
+        ++target_latest.crc_errors;
+        return 0U;
+    }
+    ux = (uint16_t)(buffer[8] | ((uint16_t)buffer[9] << 8));
+    uy = (uint16_t)(buffer[10] | ((uint16_t)buffer[11] << 8));
+    x = ux < 32768U ? (int32_t)ux : (int32_t)ux - 65536L;
+    y = uy < 32768U ? (int32_t)uy : (int32_t)uy - 65536L;
+    if (buffer[6] > 1U || buffer[7] != 0U ||
+        (!buffer[6] && (x != 0 || y != 0)) || (buffer[6] && y <= 0)) {
+        ++target_latest.format_errors;
+        return 0U;
+    }
+    seq = (uint16_t)(buffer[4] | ((uint16_t)buffer[5] << 8));
+    delta = (uint16_t)(seq - target_latest.sequence);
+    if (target_latest.has_frame) {
+        if (delta == 0U) ++target_latest.duplicate_frames;
+        else if (delta != 1U) ++target_latest.sequence_discontinuities;
+    }
+    /* Sequence is diagnostic: restart/wrap/duplicates must not lock reception.
+     * Invalid frames indicate a live link, but immediately clear the target.
+     * V3 never updates V1 commands or V2 tracking input. */
+    target_latest.sequence = seq;
+    target_latest.x_centi_cm = (int16_t)x;
+    target_latest.y_centi_cm = (int16_t)y;
+    target_latest.valid = buffer[6];
+    target_latest.has_frame = target_latest.link_alive = 1U;
+    target_latest.received_ms = now;
+    ++target_latest.accepted;
+    if (!buffer[6]) { ++target_latest.invalid_frames; ++target_latest.invalid_events; }
+    return 1U;
+}
+
 uint8_t Vision_CanRun(const VisionCommand *cmd, uint32_t now)
 {
     return cmd->valid && (uint32_t)(now - cmd->received_ms) <= VISION_TIMEOUT_MS &&
@@ -46,6 +101,9 @@ uint8_t Vision_CanRun(const VisionCommand *cmd, uint32_t now)
 
 void Vision_UartError(void)
 {
+    target_latest.valid = target_latest.link_alive = 0U;
+    target_latest.x_centi_cm = target_latest.y_centi_cm = 0;
+    ++target_latest.uart_errors;
     Distance_UartError();
     ++latest.uart_errors;
     /* Latch a safety event: a subsequent good frame cannot hide a UART fault. */
@@ -60,6 +118,7 @@ static uint8_t Parse(uint32_t now)
     int16_t speed, steer;
     uint8_t flags;
     /* V2 measurements never reach V1 motion/STOP/sequence handling. */
+    if (buffer[2] == 3U) return ParseTarget(now);
     if (buffer[2] == 2U) return Distance_ProcessFrame(buffer, now);
     crc = (uint16_t)(buffer[12] | ((uint16_t)buffer[13] << 8));
     if (Vision_Crc16(buffer, 12U) != crc) {
@@ -100,7 +159,7 @@ static uint8_t Parse(uint32_t now)
     return 1U;
 }
 
-/* Shared bounded stream state machine for V1 control and V2 measurement.
+/* Shared bounded stream state machine for V1 control, V2 distance and V3 XY measurement.
  * Only this ISR writes the 14-byte candidate. No allocation or RX backlog.
  * WAIT_AA / WAIT_55 / WAIT_HEADER / WAIT_FRAME are represented by used.
  * On rejection slide ONE byte, retaining every possible nested header.
@@ -115,8 +174,9 @@ void Vision_ProcessByte(uint8_t byte)
         if (used < 2U) return;
         if (buffer[1] != 0x55U) goto slide;
         if (used < 4U) return;
-        if ((buffer[2] != 1U && buffer[2] != 2U) || buffer[3] != VISION_FRAME_SIZE) {
-            if (buffer[2] == 2U) Distance_FormatError();
+        if ((buffer[2] != 1U && buffer[2] != 2U && buffer[2] != 3U) || buffer[3] != VISION_FRAME_SIZE) {
+            if (buffer[2] == 3U) ++target_latest.format_errors;
+            else if (buffer[2] == 2U) Distance_FormatError();
             else ++latest.format_errors;
             goto slide;
         }

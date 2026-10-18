@@ -18,6 +18,8 @@ float Ack_SpeedUpdate(AckSpeedPI *pi, float target, float measured,
 void Ack_YawReset(AckYawPID *pid, float initial_error);
 float Ack_YawUpdate(AckYawPID *pid, float target_deg, float current_deg);
 void Ack_Kinematics(float speed, float steer_rad, float *left, float *right);
+/* V3 rear-axle coordinates in metres: X right, Y forward. */
+int Ack_PurePursuit(float x_right_m, float y_forward_m, float *steer_left_rad);
 int Ack_ServoPulse(float steer_rad);
 int Ack_DebugServoPulse(float angle_deg);
 

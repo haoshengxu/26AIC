@@ -2,13 +2,14 @@
 #define ACKERMANN_CONFIG_H
 
 /* All dimensions are metres. Verify these against the actual chassis. */
-#define ACK_WHEELBASE_M             0.144f
+#define ACK_WHEELBASE_M             0.145f
 #define ACK_TRACK_M                 0.162f
 #define ACK_WHEEL_DIAMETER_M         0.065f
 #define ACK_GEAR_RATIO              30.0f
 #define ACK_ENCODER_LINES           500.0f
 #define ACK_CONTROL_DT_S            0.01f
 #define ACK_MAX_WHEEL_SPEED_MPS      0.8f
+#define ACK_PP_MIN_LOOKAHEAD_M      0.05f
 #define ACK_MAX_STEER_RAD            0.35f
 
 /* PC9 / TIM8_CH4: 1 MHz counter, 20 ms period, pulse width in us. */

@@ -1,5 +1,21 @@
-"tests/shims/stm32f4xx_hal.h", line 14: Warning:  #2687-D: declaration hides built-in function "__disable_irq" 
-  static __inline void __disable_irq(void) { irq_mask=1; }
-                       ^
-tests/test_tracking.c: 1 warning, 0 errors
-PASS: tracking; 88 assertions; case 18/18; failure line 0; signature 0xacce5501
+"tests/shims/stm32f4xx_hal.h", line 14: Warning:  #2687-D: declaration hides built-in function "__disable_irq"
+
+  static __inline void __disable_irq(void) { irq_mask=1; }
+
+                       ^
+
+"tests/test_tracking.c", line 28: Warning:  #177-D: variable "i"  was declared but never referenced
+
+      unsigned int i;
+
+                   ^
+
+"tests/test_tracking.c", line 15: Warning:  #177-D: function "tracking_advance"  was declared but never referenced
+
+  static void tracking_advance(unsigned int ms)
+
+              ^
+
+tests/test_tracking.c: 3 warnings, 0 errors
+
+PASS: tracking; 46 assertions; case 8/8; failure line 0; signature 0xacce5501

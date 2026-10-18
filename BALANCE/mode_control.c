@@ -35,7 +35,7 @@ static uint32_t s_press_ms;
 static uint32_t s_release_ms;
 static uint8_t s_pending_click;
 static uint8_t s_consumed_press;
-static uint32_t s_arm_accepted, s_arm_stop_events, s_arm_tracking_stop_events;
+static uint32_t s_arm_accepted, s_arm_stop_events, s_arm_target_invalid_events;
 static float s_debug_left = ACK_DEBUG_DEFAULT_SPEED_MPS;
 static float s_debug_right = ACK_DEBUG_DEFAULT_SPEED_MPS;
 static float s_debug_angle = ACK_DEBUG_DEFAULT_ANGLE_DEG;
@@ -76,16 +76,15 @@ static void StartTask(void)
     }
     if (s_mode == MODE_CONTROL_VISION_LINE) {
         VisionCommand cmd;
-        TrackingInput input;
+        VisionTarget target;
         uint32_t mask = __get_PRIMASK();
         __disable_irq();
         Vision_Get(&cmd);
-        Tracking_GetInput(&input);
-        /* Preserve local authorization and require a NEW valid V2 distance.
-         * V1 STOP/UART events still stop M3; V1 motion cannot start/drive it. */
-        s_arm_accepted = input.frames;
+        Vision_GetTarget(&target);
+        /* Require a V3 target received after local arming. */
+        s_arm_accepted = target.accepted;
         s_arm_stop_events = cmd.stop_events;
-        s_arm_tracking_stop_events = input.stop_events;
+        s_arm_target_invalid_events = target.invalid_events;
         __set_PRIMASK(mask);
         Tracking_Reset(&s_tracking, &s_tracking_output);
         s_start_ms = HAL_GetTick();
@@ -232,36 +231,46 @@ void ModeControl_Tick10ms(void)
     yaw = Gyro6_GetYaw();
     if (s_mode == MODE_CONTROL_VISION_LINE) {
         VisionCommand cmd;
-        TrackingInput input;
+        VisionTarget target;
+        TrackingParameters params;
+        float x, y;
         uint32_t mask = __get_PRIMASK();
         __disable_irq();
         Vision_Get(&cmd);
-        Tracking_GetInput(&input);
-        now = HAL_GetTick(); /* After snapshot: avoid RX preemption time inversion. */
+        Vision_GetTarget(&target);
+        Tracking_GetParameters(&params);
         __set_PRIMASK(mask);
-        if (cmd.stop_events != s_arm_stop_events ||
-            input.stop_events != s_arm_tracking_stop_events) {
+        if (cmd.stop_events != s_arm_stop_events) {
             StopTask(MODE_STATUS_REMOTE_STOP);
             return;
         }
-        if (s_status == MODE_STATUS_WAIT_COMMAND &&
-            input.frames == s_arm_accepted) {
+        if (target.invalid_events != s_arm_target_invalid_events) {
+            StopTask(MODE_STATUS_LINK_ERROR);
+            return;
+        }
+        if (s_status == MODE_STATUS_WAIT_COMMAND && target.accepted == s_arm_accepted) {
             if ((uint32_t)(now - s_start_ms) > VISION_ARM_WAIT_MS)
                 StopTask(MODE_STATUS_LINK_ERROR);
             return;
         }
-        if (!Tracking_CanRun(&input, now)) {
+        if (!target.valid || !target.link_alive) {
             StopTask(MODE_STATUS_LINK_ERROR);
             StartBuzzer(ERROR_BEEP_MS);
             return;
         }
-        if (!Tracking_Update(&s_tracking, &input, now,
-                             0.5f * (MOTOR_A.Encoder + MOTOR_B.Encoder),
-                             Gyro6_IsValid(), yaw, &s_tracking_output)) {
+        x = target.x_centi_cm * 0.0001f;
+        y = target.y_centi_cm * 0.0001f;
+        memset(&s_tracking_output, 0, sizeof(s_tracking_output));
+        if (!Ack_PurePursuit(x, y, &s_tracking_output.steer_left_rad)) {
             StopTask(MODE_STATUS_CONTROL_ERROR);
             StartBuzzer(ERROR_BEEP_MS);
             return;
         }
+        s_tracking_output.error_m = x; /* Target X, not cross-track error. */
+        s_tracking_output.measured_speed_mps = 0.5f*(MOTOR_A.Encoder+MOTOR_B.Encoder);
+        s_tracking_output.correction_right_rad = -s_tracking_output.steer_left_rad;
+        s_tracking_output.speed_mps = params.speed_mps;
+        s_tracking_output.valid = 1U;
         s_status = MODE_STATUS_RUNNING;
         /* Drive_Motor -> Ack_Kinematics + Ack_ServoPulse; balance.c keeps
          * the original incremental wheel-speed PI and PWM protection. */
@@ -324,6 +333,8 @@ uint8_t ModeControl_DebugCommand(const char *key, float value)
         Tracking_Reset(&s_tracking, &s_tracking_output);
         return 1;
     }
+    if (!strcmp(key,"TKP") || !strcmp(key,"TKD") ||
+        !strcmp(key,"TKS") || !strcmp(key,"TDF")) return 0;
     if (key[0] == 'T') {
         uint8_t ok = Tracking_SetParameter(key,value);
         if (ok && !strcmp(key,"TDF")) Tracking_Reset(&s_tracking,&s_tracking_output);

@@ -111,6 +111,13 @@ static void feed_distance(uint16_t seq, int16_t relative, uint8_t valid)
     if (wire > 32767L) wire = 32767L;
     feed_wire_distance(seq, (int16_t)wire, valid);
 }
+static void feed_target(uint16_t seq, int16_t x, int16_t y, uint8_t valid)
+{
+    uint8_t f[14],j; uint16_t crc;
+    make(f,seq,x,y,valid); f[2]=3;
+    crc=Vision_Crc16(f,12);f[12]=(uint8_t)crc;f[13]=(uint8_t)(crc>>8);
+    for(j=0;j<14;j++) Vision_ProcessByte(f[j]);
+}
 static void press(void) { user_key=GPIO_PIN_RESET;advance(60);user_key=GPIO_PIN_SET;advance(100); }
 static void single(void) { press();advance(310); }
 static void double_click(void) { press();press();advance(310); }
@@ -150,55 +157,42 @@ void test_entry(void)
     case_id=5;reset();
     double_click();REQUIRE(s_mode==MODE_CONTROL_TURN_90 && !ModeControl_IsActive());
     double_click();REQUIRE(s_mode==MODE_CONTROL_VISION_LINE && !ModeControl_IsActive());
-    single();REQUIRE(s_status==MODE_STATUS_WAIT_COMMAND && MOTOR_A.Target==0.0f);
-    feed_distance(1,0,1);advance(10);
+    single();REQUIRE(s_status==MODE_STATUS_WAIT_COMMAND && MOTOR_A.Target==0);
+    feed_distance(1,0,1);advance(10);REQUIRE(s_status==MODE_STATUS_WAIT_COMMAND);
+    feed_target(0,0,4500,1);advance(10);
     REQUIRE(s_status==MODE_STATUS_RUNNING && NEAR(MOTOR_A.Target,TRACK_BASE_SPEED_MPS));
-    case_id=6;start_m3();feed_distance(1,200,1);advance(10);
-    REQUIRE(MOTOR_A.Target > MOTOR_B.Target); /* Car left of line -> right turn. */
-    simulated_yaw=80.0f;feed_distance(2,200,1);advance(10);
-    Ack_Kinematics(TRACK_BASE_SPEED_MPS, -(TRACK_KP * 0.02f + atanf(TRACK_STANLEY_K * 0.02f / TRACK_MIN_SPEED_MPS)),&l,&r);
+    case_id=6;start_m3();feed_target(1,500,4500,1);advance(10);
+    REQUIRE(MOTOR_A.Target>MOTOR_B.Target && Servo>SERVO_INIT);
+    Ack_Kinematics(TRACK_BASE_SPEED_MPS,atanf(-2*0.145f*0.05f/(0.05f*0.05f+0.45f*0.45f)),&l,&r);
     REQUIRE(NEAR(MOTOR_A.Target,l) && NEAR(MOTOR_B.Target,r));
-    case_id=7;advance(1010);
-    REQUIRE(s_status==MODE_STATUS_LINK_ERROR && MOTOR_A.Target==0.0f);
-    REQUIRE(PWMA1==PWMA2 && PWMB1==PWMB2);
-    feed_distance(3,0,1);advance(10);REQUIRE(!ModeControl_IsActive());
-    case_id=8;start_m3();feed_distance(1,0,1);advance(10);
-    feed_distance(2,0,0);feed_distance(3,0,1);advance(10);
-    REQUIRE(s_status==MODE_STATUS_RUNNING && MOTOR_A.Target>0.0f);
-    case_id=9;start_m3();feed_distance(1,0,1);advance(10);
-    feed_distance(2,0,0);feed_distance(3,0,1);advance(10);
-    REQUIRE(s_status==MODE_STATUS_RUNNING);
-    case_id=10;start_m3();feed_distance(1,0,1);advance(10);
-    Vision_UartError();feed_distance(2,0,1);advance(10);
-    REQUIRE(!ModeControl_IsActive());
-    case_id=11;start_m3();feed_distance(1,0,1);advance(10);
+    feed_target(2,-500,4500,1);advance(10);REQUIRE(MOTOR_A.Target<MOTOR_B.Target && Servo<SERVO_INIT);
+    case_id=7;advance(300);REQUIRE(s_status==MODE_STATUS_LINK_ERROR && MOTOR_A.Target==0 && Servo==SERVO_INIT);
+    feed_target(3,0,4500,1);advance(10);REQUIRE(!ModeControl_IsActive());
+    case_id=8;start_m3();feed_target(1,0,4500,1);advance(10);
+    feed_target(2,0,0,0);feed_target(3,0,4500,1);advance(10);
+    REQUIRE(s_status==MODE_STATUS_LINK_ERROR); /* Invalid event cannot be hidden by next good frame. */
+    case_id=9;start_m3();feed_target(1,0,4500,1);advance(10);
+    Vision_UartError();feed_target(2,0,4500,1);advance(10);REQUIRE(!ModeControl_IsActive());
+    case_id=10;start_m3();feed_target(1,0,4500,1);advance(10);
+    feed(1,0,0,4);advance(10);REQUIRE(s_status==MODE_STATUS_REMOTE_STOP);
+    case_id=11;start_m3();feed_target(1,0,4500,1);advance(10);
     enable_input=0;advance(10);REQUIRE(s_status==MODE_STATUS_POWER_ERROR);
-    enable_input=1;feed_distance(2,0,1);advance(10);REQUIRE(!ModeControl_IsActive());
-    case_id=12;start_m3();feed_distance(1,0,1);advance(10);
-    Voltage=9.0f;advance(10);REQUIRE(s_status==MODE_STATUS_POWER_ERROR);
-    case_id=13;start_m3();feed_distance(1,0,1);advance(10);
-    send_imu=0;
-    for(i=0;i<102;i++) {feed_distance((uint16_t)(i+2),0,1);advance(10);}
-    REQUIRE(s_status==MODE_STATUS_RUNNING); /* Baseline M3 does not gate on IMU. */
-    case_id=14;start_m3();advance(1010);
-    REQUIRE(s_status==MODE_STATUS_LINK_ERROR);
-    case_id=15;reset();feed_distance(1,0,1);s_mode=MODE_CONTROL_VISION_LINE;StartTask();advance(10);
-    REQUIRE(s_status==MODE_STATUS_WAIT_COMMAND && MOTOR_A.Target==0.0f);
-    feed_distance(2,0,1);advance(10);REQUIRE(s_status==MODE_STATUS_RUNNING);
-    case_id=16;reset();
-    REQUIRE(Encoder_precision==60000.0f);
-    left_count=881;right_count=-881;Get_Velocity_Form_Encoder();
-    REQUIRE(fabsf(MOTOR_A.Encoder-0.3f)<0.001f && fabsf(MOTOR_B.Encoder-0.3f)<0.001f);
-    case_id=17;reset();StartTask();advance(5010);
-    REQUIRE(s_status==MODE_STATUS_DONE); /* Original M1 retained. */
-    case_id=18;reset();s_mode=MODE_CONTROL_TURN_90;StartTask();
-    simulated_yaw=89.5f;advance(10);REQUIRE(s_status==MODE_STATUS_DONE);
-    case_id=19;start_m3();feed_distance(1,0,1);advance(10);
-    feed_distance(1,0,0);feed_distance(2,0,1);advance(10);
-    REQUIRE(s_status==MODE_STATUS_RUNNING); /* Invalid V2 frame retains the last usable measurement. */
-    case_id=20;start_m3();feed_distance(1,0,1);advance(10);
-    for(i=0;i<102;i++) {feed_distance(1,0,1);advance(10);}
-    REQUIRE(s_status==MODE_STATUS_LINK_ERROR); /* Replay cannot refresh heartbeat. */
+    case_id=12;start_m3();feed_target(1,0,4500,1);advance(10);
+    Voltage=9;advance(10);REQUIRE(s_status==MODE_STATUS_POWER_ERROR);
+    case_id=13;start_m3();send_imu=0;
+    for(i=0;i<102;i++){feed_target(i,0,4500,1);advance(10);}
+    REQUIRE(s_status==MODE_STATUS_RUNNING && !Gyro6_IsValid());
+    case_id=14;start_m3();advance(1010);REQUIRE(s_status==MODE_STATUS_LINK_ERROR);
+    case_id=15;reset();feed_target(1,0,4500,1);s_mode=MODE_CONTROL_VISION_LINE;StartTask();advance(10);
+    REQUIRE(s_status==MODE_STATUS_WAIT_COMMAND);
+    feed_target(2,0,4500,1);advance(10);REQUIRE(s_status==MODE_STATUS_RUNNING);
+    case_id=16;reset();REQUIRE(Encoder_precision==60000.0f);
+    left_count=881;right_count=-881;Get_Velocity_Form_Encoder();REQUIRE(fabsf(MOTOR_A.Encoder-0.3f)<0.001f);
+    case_id=17;reset();StartTask();advance(5010);REQUIRE(s_status==MODE_STATUS_DONE);
+    case_id=18;reset();s_mode=MODE_CONTROL_TURN_90;StartTask();simulated_yaw=89.5f;advance(10);REQUIRE(s_status==MODE_STATUS_DONE);
+    case_id=19;start_m3();feed_target(1,1,1,1);advance(10);REQUIRE(s_status==MODE_STATUS_CONTROL_ERROR);
+    case_id=20;start_m3();feed_target(65535,0,4500,1);advance(10);
+    feed_target(0,0,4500,1);advance(10);REQUIRE(s_status==MODE_STATUS_RUNNING);
     case_id=21;reset();
     {
         DistanceMeasurement d;
@@ -217,6 +211,83 @@ void test_entry(void)
         REQUIRE(d.distance_raw==2000 && d.measurement_valid);
         feed_wire_distance(7,0,0);Distance_Get(&d);Tracking_GetInput(&input);
         REQUIRE(d.distance_raw==0 && !d.measurement_valid && input.valid);
+    }
+    case_id=22;reset();
+    {
+        static const uint8_t a[14]={0xAA,0x55,3,14,0,0,1,0,0xF4,1,0x94,0x11,0xF7,0xF6};
+        static const uint8_t b[14]={0xAA,0x55,3,14,1,0,1,0,0x52,0xFB,0x95,0x11,0x69,0x6B};
+        static const uint8_t c[14]={0xAA,0x55,3,14,2,0,0,0,0,0,0,0,0x42,0x88};
+        uint8_t f[14]; uint16_t crc; unsigned int j;
+        VisionTarget t; VisionCommand cmd; TrackingInput input;
+        REQUIRE(Vision_Crc16((const uint8_t *)"123456789",9)==0x29B1);
+        for(j=0;j<7;j++) Vision_ProcessByte(a[j]);
+        Vision_GetTarget(&t); REQUIRE(!t.has_frame);
+        for(j=7;j<14;j++) Vision_ProcessByte(a[j]);
+        Vision_GetTarget(&t); REQUIRE(t.valid && t.x_centi_cm==500 && t.y_centi_cm==4500);
+        for(j=0;j<14;j++) Vision_ProcessByte(b[j]);
+        Vision_GetTarget(&t); REQUIRE(t.valid && t.x_centi_cm==-1198 && t.y_centi_cm==4501);
+        for(j=0;j<14;j++) Vision_ProcessByte(c[j]);
+        Vision_GetTarget(&t); REQUIRE(!t.valid && t.link_alive && !t.x_centi_cm && !t.y_centi_cm);
+        /* Sequence restart and duplicates accepted, wrap is consecutive. */
+        for(j=0;j<14;j++) Vision_ProcessByte(a[j]);
+        for(j=0;j<14;j++) Vision_ProcessByte(a[j]);
+        Vision_GetTarget(&t); REQUIRE(t.valid && t.duplicate_frames==1 && t.sequence_discontinuities==1);
+        now_ms+=299; Vision_GetTarget(&t); REQUIRE(t.valid);
+        now_ms++; Vision_GetTarget(&t); REQUIRE(!t.valid && !t.link_alive && t.timeouts==1);
+        Vision_GetTarget(&t); REQUIRE(t.timeouts==1);
+        /* Payload AA55 must not split a frame, and int16 is not angle-limited. */
+        memcpy(f,a,14);f[4]=255;f[5]=255;f[8]=0xAA;f[9]=0x55;
+        crc=Vision_Crc16(f,12);f[12]=(uint8_t)crc;f[13]=(uint8_t)(crc>>8);
+        for(j=0;j<14;j++) Vision_ProcessByte(f[j]);
+        for(j=0;j<14;j++) Vision_ProcessByte(a[j]);
+        Vision_GetTarget(&t); REQUIRE(t.sequence==0 && t.valid && t.sequence_discontinuities==2);
+        /* Reject reserved, invalid nonzero XY, and nonpositive forward Y. */
+        for(i=0;i<4;i++) {
+            memcpy(f,a,14);
+            if(i==0) f[7]=1;
+            if(i==1) f[6]=0;
+            if(i==2) f[10]=f[11]=0;
+            if(i==3) f[6]=2;
+            crc=Vision_Crc16(f,12);f[12]=(uint8_t)crc;f[13]=(uint8_t)(crc>>8);
+            for(j=0;j<14;j++) Vision_ProcessByte(f[j]);
+        }
+        Vision_GetTarget(&t); REQUIRE(t.format_errors==4);
+        memcpy(f,a,14);f[12]^=1;
+        for(j=0;j<14;j++) Vision_ProcessByte(f[j]);
+        for(j=0;j<14;j++) Vision_ProcessByte(b[j]);
+        Vision_GetTarget(&t); REQUIRE(t.crc_errors==1 && t.valid && t.sequence==1);
+        /* Broken length and truncated frame recover at the next valid header. */
+        memcpy(f,a,14);f[3]=13;
+        for(j=0;j<14;j++) Vision_ProcessByte(f[j]);
+        for(j=0;j<8;j++) Vision_ProcessByte(a[j]);
+        for(j=0;j<14;j++) Vision_ProcessByte(b[j]);
+        Vision_GetTarget(&t); REQUIRE(t.valid && t.x_centi_cm==-1198);
+        Vision_Get(&cmd);Tracking_GetInput(&input);
+        REQUIRE(cmd.accepted==0 && cmd.stop_events==0 && !input.valid);
+        Vision_UartError();Vision_GetTarget(&t);
+        REQUIRE(!t.valid && !t.link_alive && t.uart_errors==1);
+    }
+    case_id=23;reset();
+    {
+        float angle; union {uint32_t bits;float f;} bad;
+        REQUIRE(Ack_PurePursuit(0,0.408f,&angle) && angle==0);
+        REQUIRE(Ack_PurePursuit(-0.15413333f,0.377769f,&angle));
+        REQUIRE(fabsf(angle-atanf(0.145f/0.54f))<0.001f);
+        REQUIRE(Ack_PurePursuit(0.5f,0.01f,&angle) && angle==-ACK_MAX_STEER_RAD);
+        REQUIRE(!Ack_PurePursuit(0,0,&angle) && angle==0);
+        REQUIRE(!Ack_PurePursuit(0,-0.5f,&angle));
+        REQUIRE(!Ack_PurePursuit(0.001f,0.001f,&angle));
+        bad.bits=0x7F800000;REQUIRE(!Ack_PurePursuit(bad.f,1,&angle));
+        bad.bits=0x7FC00000;REQUIRE(!Ack_PurePursuit(0,bad.f,&angle));
+        start_m3();feed_target(1,0,4500,1);advance(10);advance(280);
+        REQUIRE(s_status==MODE_STATUS_RUNNING);advance(10);
+        REQUIRE(s_status==MODE_STATUS_LINK_ERROR && MOTOR_A.Target==0);
+        start_m3();feed_target(2,500,4500,1);advance(10);
+        REQUIRE(ModeControl_DebugCommand("TV",0.8f));advance(10);
+        REQUIRE(MOTOR_A.Target<=0.8f && MOTOR_B.Target<=0.8f);
+        REQUIRE(!ModeControl_DebugCommand("TKP",2));
+        REQUIRE(ModeControl_DebugCommand("RUN",0));advance(10);
+        REQUIRE(s_status==MODE_STATUS_STOPPED && Servo==SERVO_INIT);
     }
     finish(0);
 }

@@ -1,3 +1,5 @@
+> 当前M3已改为V3后轴XY纯追踪。旧V2/PD/Stanley控制说明为历史记录，当前启停与VOFA通道见 [README_V3接收.md](README_V3接收.md)。
+
 最新补充：M3 已支持在线参数与 VOFA 启动，新增 I22～I33。详细配置以 README_M3_VOFA调参.md 为准。
 
 # Demo1 四模式：视觉循迹与 VOFA 调试
