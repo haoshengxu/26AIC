@@ -158,10 +158,10 @@ void Vofa_Task(void)
     frame.channels[26] = target.link_alive;
     frame.channels[27] = 0.5f * (MOTOR_A.Encoder + MOTOR_B.Encoder);
     frame.channels[28] = params.speed_mps;
-    frame.channels[29] = 0.0f;
-    frame.channels[30] = 0.0f;
-    frame.channels[31] = 0.0f;
-    frame.channels[32] = 0.0f;
+    frame.channels[29] = params.turn_x_threshold_cm;
+    frame.channels[30] = params.turn_speed_gain;
+    frame.channels[31] = params.turn_min_speed_mps;
+    frame.channels[32] = output.speed_mps;
     frame.channels[33] = output.valid &&
         (output.correction_right_rad >= TRACK_STEER_LIMIT_RAD ||
          output.correction_right_rad <= -TRACK_STEER_LIMIT_RAD) ? 1.0f : 0.0f;

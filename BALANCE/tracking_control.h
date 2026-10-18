@@ -24,7 +24,12 @@ typedef struct {
 } TrackingOutput;
 
 void Tracking_InputInit(void); /* Before RX interrupts. */
-typedef struct { float speed_mps, kp, kd, stanley_k, filter_tau_s; } TrackingParameters;
+typedef struct {
+    float speed_mps, kp, kd, stanley_k, filter_tau_s;
+    float turn_x_threshold_cm, turn_speed_gain, turn_min_speed_mps;
+} TrackingParameters;
+/* M3 target X in metres; returns requested rear-axle centre speed. */
+float Tracking_TurnSpeed(float x_right_m, const TrackingParameters *params);
 void Tracking_GetParameters(TrackingParameters *out);
 void Tracking_DefaultParameters(void);
 /* Caller masks interrupts to serialize with the control ISR. */

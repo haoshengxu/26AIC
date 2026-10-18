@@ -87,12 +87,29 @@ void test_entry(void)
         REQUIRE(frame.channels[14]==5 && frame.channels[22]==45);
         REQUIRE(frame.channels[16]==1 && frame.channels[26]==1 && frame.channels[21]==1);
         REQUIRE(frame.channels[20]<0 && frame.channels[24]<0 && frame.channels[25]<0);
-        REQUIRE(frame.channels[28]==0.4f && frame.channels[29]==0);
+        REQUIRE(frame.channels[28]==0.4f && frame.channels[29]==5);
         now_ms+=300;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
         REQUIRE(frame.channels[16]==0 && frame.channels[15]==3 && frame.channels[26]==0);
         advance(10); REQUIRE(ModeControl_GetStatus()==MODE_STATUS_RUNNING);
         REQUIRE(frame.channels[21]==1);
         advance(650);REQUIRE(ModeControl_GetStatus()==MODE_STATUS_LINK_ERROR);
+    }
+    case_id=5;
+    receive_text("TXTH=8;TXK=0.02;TVMIN=0.12;");
+    {
+        TrackingParameters p;
+        Tracking_GetParameters(&p);
+        REQUIRE(p.turn_x_threshold_cm==8 && NEAR(p.turn_speed_gain,0.02f,0.0001f) && NEAR(p.turn_min_speed_mps,0.12f,0.0001f));
+        now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
+        REQUIRE(frame.channels[29]==8 && frame.channels[30]==p.turn_speed_gain && frame.channels[31]==p.turn_min_speed_mps);
+        REQUIRE(frame.channels[32]==0); /* Stopped output. */
+        {
+            float before=rejected;
+            receive_text("TXTH=-1;TXK=1.1;TVMIN=0;TXK=nan;");
+            REQUIRE(rejected==before+4);
+        }
+        receive_text("TRESET=1;");Tracking_GetParameters(&p);
+        REQUIRE(p.turn_x_threshold_cm==5 && p.turn_speed_gain==0.020f && p.turn_min_speed_mps==0.27f && p.speed_mps==0.35f);
     }
     finish(0);
 }

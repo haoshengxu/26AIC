@@ -10,7 +10,8 @@ static volatile float tracking_path_yaw;
 static volatile uint32_t tracking_path_ms;
 static volatile uint8_t tracking_path_valid;
 static TrackingParameters parameters = {TRACK_BASE_SPEED_MPS, TRACK_KP,
-    TRACK_KD, TRACK_STANLEY_K, TRACK_D_FILTER_TAU_S};
+    TRACK_KD, TRACK_STANLEY_K, TRACK_D_FILTER_TAU_S,
+    TRACK_TURN_X_THRESHOLD_CM, TRACK_TURN_SPEED_GAIN, TRACK_TURN_MIN_SPEED_MPS};
 
 void Tracking_DefaultParameters(void)
 {
@@ -19,6 +20,9 @@ void Tracking_DefaultParameters(void)
     parameters.kd = TRACK_KD;
     parameters.stanley_k = TRACK_STANLEY_K;
     parameters.filter_tau_s = TRACK_D_FILTER_TAU_S;
+    parameters.turn_x_threshold_cm = TRACK_TURN_X_THRESHOLD_CM;
+    parameters.turn_speed_gain = TRACK_TURN_SPEED_GAIN;
+    parameters.turn_min_speed_mps = TRACK_TURN_MIN_SPEED_MPS;
 }
 
 void Tracking_GetParameters(TrackingParameters *out)
@@ -33,6 +37,12 @@ uint8_t Tracking_SetParameter(const char *key, float value)
 {
     if (!strcmp(key,"TV") && value >= 0.01f && value <= ACK_MAX_WHEEL_SPEED_MPS)
         parameters.speed_mps = value;
+    else if (!strcmp(key,"TXTH") && value >= 0.0f && value <= 327.68f)
+        parameters.turn_x_threshold_cm = value;
+    else if (!strcmp(key,"TXK") && value >= 0.0f && value <= 1.0f)
+        parameters.turn_speed_gain = value;
+    else if (!strcmp(key,"TVMIN") && value >= 0.01f && value <= ACK_MAX_WHEEL_SPEED_MPS)
+        parameters.turn_min_speed_mps = value;
     else if (!strcmp(key,"TKP") && value >= 0.0f && value <= 10.0f)
         parameters.kp = value;
     else if (!strcmp(key,"TKD") && value >= 0.0f && value <= 2.0f)
@@ -43,6 +53,14 @@ uint8_t Tracking_SetParameter(const char *key, float value)
         parameters.filter_tau_s = value;
     else return 0U;
     return 1U;
+}
+
+float Tracking_TurnSpeed(float x_right_m, const TrackingParameters *p)
+{
+    float excess_cm = fabsf(x_right_m)*100.0f-p->turn_x_threshold_cm;
+    float floor = p->turn_min_speed_mps < p->speed_mps ? p->turn_min_speed_mps : p->speed_mps;
+    if (excess_cm <= 0.0f) return p->speed_mps;
+    return Ack_Clamp(p->speed_mps-p->turn_speed_gain*excess_cm, floor, p->speed_mps);
 }
 
 static uint8_t Tracking_Finite(float value)

@@ -318,5 +318,51 @@ void test_entry(void)
         now_ms+=999U;Vision_GetControlTarget(&usable);REQUIRE(usable.valid && usable.x_centi_cm==0);
         now_ms++;Vision_GetControlTarget(&usable);REQUIRE(!usable.valid);
     }
+    case_id=25;start_m3();
+    {
+        TrackingParameters p; TrackingOutput out;
+        float saved, left_speed;
+        Tracking_GetParameters(&p);
+        REQUIRE(p.speed_mps==0.35f && p.turn_speed_gain==0.020f && p.turn_min_speed_mps==0.27f && p.turn_x_threshold_cm==5);
+        REQUIRE(NEAR(Tracking_TurnSpeed(0.05f,&p),0.35f));
+        REQUIRE(NEAR(Tracking_TurnSpeed(0.07f,&p),0.31f));
+        REQUIRE(NEAR(Tracking_TurnSpeed(0.09f,&p),0.27f));
+        REQUIRE(NEAR(Tracking_TurnSpeed(-0.50f,&p),0.27f));
+        /* Exercise runtime settings independently of compiled defaults. */
+        REQUIRE(ModeControl_DebugCommand("TV",0.25f));
+        REQUIRE(ModeControl_DebugCommand("TXK",0.01f));
+        REQUIRE(ModeControl_DebugCommand("TVMIN",0.10f));
+        Tracking_GetParameters(&p);
+        REQUIRE(NEAR(Tracking_TurnSpeed(0,&p),0.25f));
+        REQUIRE(NEAR(Tracking_TurnSpeed(0.05f,&p),0.25f));
+        REQUIRE(NEAR(Tracking_TurnSpeed(0.10f,&p),0.20f));
+        REQUIRE(NEAR(Tracking_TurnSpeed(-0.10f,&p),0.20f));
+        REQUIRE(NEAR(Tracking_TurnSpeed(0.50f,&p),0.10f));
+        feed_target(1,1000,4500,1);advance(10);
+        ModeControl_GetTrackingOutput(&out);REQUIRE(NEAR(out.speed_mps,0.20f));
+        saved=out.steer_left_rad;left_speed=MOTOR_A.Target;
+        REQUIRE(ModeControl_DebugCommand("TXK",0.02f));advance(10);
+        ModeControl_GetTrackingOutput(&out);
+        REQUIRE(NEAR(out.speed_mps,0.15f) && out.steer_left_rad==saved && MOTOR_A.Target<left_speed);
+        /* New target closer to centre restores speed, hold retains slowed speed. */
+        feed_target(2,1500,4500,1);advance(10);ModeControl_GetTrackingOutput(&out);
+        REQUIRE(NEAR(out.speed_mps,0.10f));
+        feed_target(3,0,0,0);advance(500);ModeControl_GetTrackingOutput(&out);
+        REQUIRE(s_status==MODE_STATUS_RUNNING && NEAR(out.speed_mps,0.10f));
+        feed_target(4,0,4500,1);advance(10);ModeControl_GetTrackingOutput(&out);
+        REQUIRE(NEAR(out.speed_mps,0.25f));
+        REQUIRE(ModeControl_DebugCommand("TXK",0));
+        Tracking_GetParameters(&p);REQUIRE(NEAR(Tracking_TurnSpeed(3,&p),0.25f));
+        REQUIRE(ModeControl_DebugCommand("TVMIN",0.8f));
+        REQUIRE(ModeControl_DebugCommand("TXK",1));
+        Tracking_GetParameters(&p);REQUIRE(NEAR(Tracking_TurnSpeed(3,&p),0.25f));
+        REQUIRE(!ModeControl_DebugCommand("TXK",-1) && !ModeControl_DebugCommand("TXTH",-1));
+        REQUIRE(!ModeControl_DebugCommand("TVMIN",0) && !ModeControl_DebugCommand("TVMIN",0.81f));
+        REQUIRE(ModeControl_DebugCommand("TRESET",1));
+        Tracking_GetParameters(&p);REQUIRE(p.turn_speed_gain==TRACK_TURN_SPEED_GAIN && p.turn_x_threshold_cm==TRACK_TURN_X_THRESHOLD_CM);
+        /* M4 wheel targets do not use M3 turn slowdown. */
+        REQUIRE(ModeControl_DebugCommand("M",4));REQUIRE(ModeControl_DebugCommand("RUN",1));
+        advance(10);REQUIRE(NEAR(MOTOR_A.Target,0.3f) && NEAR(MOTOR_B.Target,0.3f));
+    }
     finish(0);
 }

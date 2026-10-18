@@ -264,7 +264,7 @@ void ModeControl_Tick10ms(void)
         s_tracking_output.error_m = x; /* Target X, not cross-track error. */
         s_tracking_output.measured_speed_mps = 0.5f*(MOTOR_A.Encoder+MOTOR_B.Encoder);
         s_tracking_output.correction_right_rad = -s_tracking_output.steer_left_rad;
-        s_tracking_output.speed_mps = params.speed_mps;
+        s_tracking_output.speed_mps = Tracking_TurnSpeed(x, &params);
         s_tracking_output.valid = 1U;
         s_status = MODE_STATUS_RUNNING;
         /* Drive_Motor -> Ack_Kinematics + Ack_ServoPulse; balance.c keeps
