@@ -63,14 +63,13 @@ void Tracking_OnFrame(int16_t raw, uint16_t seq, uint8_t valid, uint32_t now)
     uint32_t mask = __get_PRIMASK();
     __disable_irq();
     if (!valid) {
-        ++tracking_input.stop_events; /* A later good packet cannot hide line loss. */
-        tracking_input.valid = 0U;
-        tracking_input.distance_raw = 0;
+        /* A line-loss report is not a new usable measurement. Keep the last
+         * valid sample and its timestamp; continued loss cannot renew it. */
         __set_PRIMASK(mask);
         return;
     }
     delta = (uint16_t)(seq - tracking_input.sequence);
-    if (tracking_input.valid && (uint32_t)(now - tracking_input.received_ms) <= TRACK_TIMEOUT_MS &&
+    if (tracking_input.valid && (uint32_t)(now - tracking_input.received_ms) < TRACK_TIMEOUT_MS &&
         (delta == 0U || delta >= 0x8000U)) {
         ++tracking_input.sequence_errors;
         __set_PRIMASK(mask);
@@ -104,7 +103,7 @@ void Tracking_GetInput(TrackingInput *out)
 
 uint8_t Tracking_CanRun(const TrackingInput *in, uint32_t now)
 {
-    return in->valid && (uint32_t)(now - in->received_ms) <= TRACK_TIMEOUT_MS;
+    return in->valid && (uint32_t)(now - in->received_ms) < TRACK_TIMEOUT_MS;
 }
 
 void Tracking_Reset(TrackingController *controller, TrackingOutput *out)

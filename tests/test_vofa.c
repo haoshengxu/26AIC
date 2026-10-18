@@ -85,7 +85,7 @@ void test_entry(void)
         REQUIRE(frame.channels[15]==DISTANCE_VALID && frame.channels[16]==1);
         REQUIRE(frame.channels[17]==1 && frame.channels[18]==50 && frame.channels[21]==1);
         now_ms+=210; huart3.gState=HAL_UART_STATE_READY; Vofa_Task();
-        REQUIRE(frame.channels[14]==0 && frame.channels[16]==0 && frame.channels[21]==0);
+        REQUIRE(frame.channels[14]==0 && frame.channels[16]==0 && frame.channels[21]==1);
         REQUIRE(frame.channels[15]==DISTANCE_TIMEOUT);
     }
     case_id=4;
@@ -114,7 +114,7 @@ void test_entry(void)
         REQUIRE(frame.channels[28]==0.4f && frame.channels[29]==2 && frame.channels[31]==0);
         REQUIRE(NEAR(frame.channels[23],0.02f*57.2957795f,0.0001f));
         receive_text("RUN=1;");REQUIRE(ModeControl_GetStatus()==MODE_STATUS_RUNNING);
-        advance(210);REQUIRE(ModeControl_GetStatus()==MODE_STATUS_LINK_ERROR);
+        advance(1010);REQUIRE(ModeControl_GetStatus()==MODE_STATUS_LINK_ERROR);
         receive_text("TRESET=1;");Tracking_GetParameters(&p);
         REQUIRE(p.kp==TRACK_KP && p.speed_mps==TRACK_BASE_SPEED_MPS && !ModeControl_IsActive());
         receive_text("RUN=1;");REQUIRE(ModeControl_GetStatus()==MODE_STATUS_WAIT_COMMAND);

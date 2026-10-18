@@ -106,7 +106,7 @@ static void feed_wire_distance(uint16_t seq, int16_t raw, uint8_t valid)
 /* Scenarios specify desired center-relative error in original polarity. */
 static void feed_distance(uint16_t seq, int16_t relative, uint8_t valid)
 {
-    int32_t wire = valid ? -1600L + relative : 0;
+    int32_t wire = valid ? -2000L + relative : 0;
     if (wire < -32768L) wire = -32768L;
     if (wire > 32767L) wire = 32767L;
     feed_wire_distance(seq, (int16_t)wire, valid);
@@ -158,16 +158,16 @@ void test_entry(void)
     simulated_yaw=80.0f;feed_distance(2,200,1);advance(10);
     Ack_Kinematics(TRACK_BASE_SPEED_MPS, -(TRACK_KP * 0.02f + atanf(TRACK_STANLEY_K * 0.02f / TRACK_MIN_SPEED_MPS)),&l,&r);
     REQUIRE(NEAR(MOTOR_A.Target,l) && NEAR(MOTOR_B.Target,r));
-    case_id=7;advance(210);
+    case_id=7;advance(1010);
     REQUIRE(s_status==MODE_STATUS_LINK_ERROR && MOTOR_A.Target==0.0f);
     REQUIRE(PWMA1==PWMA2 && PWMB1==PWMB2);
     feed_distance(3,0,1);advance(10);REQUIRE(!ModeControl_IsActive());
     case_id=8;start_m3();feed_distance(1,0,1);advance(10);
     feed_distance(2,0,0);feed_distance(3,0,1);advance(10);
-    REQUIRE(s_status==MODE_STATUS_REMOTE_STOP && MOTOR_A.Target==0.0f);
+    REQUIRE(s_status==MODE_STATUS_RUNNING && MOTOR_A.Target>0.0f);
     case_id=9;start_m3();feed_distance(1,0,1);advance(10);
     feed_distance(2,0,0);feed_distance(3,0,1);advance(10);
-    REQUIRE(s_status==MODE_STATUS_REMOTE_STOP);
+    REQUIRE(s_status==MODE_STATUS_RUNNING);
     case_id=10;start_m3();feed_distance(1,0,1);advance(10);
     Vision_UartError();feed_distance(2,0,1);advance(10);
     REQUIRE(!ModeControl_IsActive());
@@ -178,7 +178,7 @@ void test_entry(void)
     Voltage=9.0f;advance(10);REQUIRE(s_status==MODE_STATUS_POWER_ERROR);
     case_id=13;start_m3();feed_distance(1,0,1);advance(10);
     send_imu=0;
-    for(i=0;i<22;i++) {feed_distance((uint16_t)(i+2),0,1);advance(10);}
+    for(i=0;i<102;i++) {feed_distance((uint16_t)(i+2),0,1);advance(10);}
     REQUIRE(s_status==MODE_STATUS_RUNNING); /* Baseline M3 does not gate on IMU. */
     case_id=14;start_m3();advance(1010);
     REQUIRE(s_status==MODE_STATUS_LINK_ERROR);
@@ -195,28 +195,28 @@ void test_entry(void)
     simulated_yaw=89.5f;advance(10);REQUIRE(s_status==MODE_STATUS_DONE);
     case_id=19;start_m3();feed_distance(1,0,1);advance(10);
     feed_distance(1,0,0);feed_distance(2,0,1);advance(10);
-    REQUIRE(s_status==MODE_STATUS_REMOTE_STOP); /* Duplicate STOP still wins. */
+    REQUIRE(s_status==MODE_STATUS_RUNNING); /* Invalid V2 frame retains the last usable measurement. */
     case_id=20;start_m3();feed_distance(1,0,1);advance(10);
-    for(i=0;i<22;i++) {feed_distance(1,0,1);advance(10);}
+    for(i=0;i<102;i++) {feed_distance(1,0,1);advance(10);}
     REQUIRE(s_status==MODE_STATUS_LINK_ERROR); /* Replay cannot refresh heartbeat. */
     case_id=21;reset();
     {
         DistanceMeasurement d;
         TrackingInput input;
-        feed_wire_distance(1,-1400,1);Distance_Get(&d);Tracking_GetInput(&input);
+        feed_wire_distance(1,-1800,1);Distance_Get(&d);Tracking_GetInput(&input);
         REQUIRE(d.distance_raw==200 && input.distance_raw==200);
-        feed_wire_distance(2,-1800,1);Distance_Get(&d);Tracking_GetInput(&input);
+        feed_wire_distance(2,-2200,1);Distance_Get(&d);Tracking_GetInput(&input);
         REQUIRE(d.distance_raw==-200 && input.distance_raw==-200);
         feed_wire_distance(3,-32768,1);Distance_Get(&d);Tracking_GetInput(&input);
-        REQUIRE(d.distance_raw==-31168 && input.distance_raw==-31168);
+        REQUIRE(d.distance_raw==-30768 && input.distance_raw==-30768);
         feed_wire_distance(4,32767,1);Distance_Get(&d);
         REQUIRE(d.distance_raw==32767);
-        feed_wire_distance(5,-1600,1);Distance_Get(&d);
+        feed_wire_distance(5,-2000,1);Distance_Get(&d);
         REQUIRE(d.distance_raw==0 && d.measurement_valid);
         feed_wire_distance(6,0,1);Distance_Get(&d);
-        REQUIRE(d.distance_raw==1600 && d.measurement_valid);
+        REQUIRE(d.distance_raw==2000 && d.measurement_valid);
         feed_wire_distance(7,0,0);Distance_Get(&d);Tracking_GetInput(&input);
-        REQUIRE(d.distance_raw==0 && !d.measurement_valid && !input.valid);
+        REQUIRE(d.distance_raw==0 && !d.measurement_valid && input.valid);
     }
     finish(0);
 }

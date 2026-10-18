@@ -19,6 +19,6 @@
 #define TRACK_TO_CHASSIS_SIGN       (-1.0f)
 #define TRACK_HEADING_GAIN          1.0f
 #define TRACK_HEADING_MAX_AGE_MS    200U
-/* M3 retains 200 ms stop deadline; M4 display retains its separate 250 ms. */
-#define TRACK_TIMEOUT_MS            200U
+/* Hold the last valid measurement for up to 1000 ms; display expires at 250 ms. */
+#define TRACK_TIMEOUT_MS            1000U
 #endif
