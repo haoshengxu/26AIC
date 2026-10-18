@@ -166,11 +166,11 @@ void test_entry(void)
     Ack_Kinematics(TRACK_BASE_SPEED_MPS,atanf(-2*0.145f*0.05f/(0.05f*0.05f+0.45f*0.45f)),&l,&r);
     REQUIRE(NEAR(MOTOR_A.Target,l) && NEAR(MOTOR_B.Target,r));
     feed_target(2,-500,4500,1);advance(10);REQUIRE(MOTOR_A.Target<MOTOR_B.Target && Servo<SERVO_INIT);
-    case_id=7;advance(300);REQUIRE(s_status==MODE_STATUS_LINK_ERROR && MOTOR_A.Target==0 && Servo==SERVO_INIT);
+    case_id=7;advance(1000);REQUIRE(s_status==MODE_STATUS_LINK_ERROR && MOTOR_A.Target==0 && Servo==SERVO_INIT);
     feed_target(3,0,4500,1);advance(10);REQUIRE(!ModeControl_IsActive());
     case_id=8;start_m3();feed_target(1,0,4500,1);advance(10);
     feed_target(2,0,0,0);feed_target(3,0,4500,1);advance(10);
-    REQUIRE(s_status==MODE_STATUS_LINK_ERROR); /* Invalid event cannot be hidden by next good frame. */
+    REQUIRE(s_status==MODE_STATUS_RUNNING); /* Valid recovery replaces held target. */
     case_id=9;start_m3();feed_target(1,0,4500,1);advance(10);
     Vision_UartError();feed_target(2,0,4500,1);advance(10);REQUIRE(!ModeControl_IsActive());
     case_id=10;start_m3();feed_target(1,0,4500,1);advance(10);
@@ -279,7 +279,7 @@ void test_entry(void)
         REQUIRE(!Ack_PurePursuit(0.001f,0.001f,&angle));
         bad.bits=0x7F800000;REQUIRE(!Ack_PurePursuit(bad.f,1,&angle));
         bad.bits=0x7FC00000;REQUIRE(!Ack_PurePursuit(0,bad.f,&angle));
-        start_m3();feed_target(1,0,4500,1);advance(10);advance(280);
+        start_m3();feed_target(1,0,4500,1);advance(10);advance(980);
         REQUIRE(s_status==MODE_STATUS_RUNNING);advance(10);
         REQUIRE(s_status==MODE_STATUS_LINK_ERROR && MOTOR_A.Target==0);
         start_m3();feed_target(2,500,4500,1);advance(10);
@@ -288,6 +288,35 @@ void test_entry(void)
         REQUIRE(!ModeControl_DebugCommand("TKP",2));
         REQUIRE(ModeControl_DebugCommand("RUN",0));advance(10);
         REQUIRE(s_status==MODE_STATUS_STOPPED && Servo==SERVO_INIT);
+    }
+    case_id=24;start_m3();
+    {
+        unsigned int j; float saved; VisionTarget usable;
+        feed_target(1,500,4500,1);advance(10); saved=MOTOR_A.Target;
+        /* Invalid frames arrive continuously but cannot extend valid age. */
+        for(j=0;j<98;j++){feed_target((uint16_t)(j+2),0,0,0);advance(10);}
+        REQUIRE(s_status==MODE_STATUS_RUNNING && NEAR(MOTOR_A.Target,saved));
+        /* Recover just before the deadline, change side and renew full second. */
+        feed_target(100,-500,4500,1);advance(10);
+        REQUIRE(s_status==MODE_STATUS_RUNNING && MOTOR_A.Target<MOTOR_B.Target);
+        saved=MOTOR_A.Target;
+        for(j=0;j<98;j++){feed_target((uint16_t)(j+101),0,0,0);advance(10);}
+        REQUIRE(s_status==MODE_STATUS_RUNNING && NEAR(MOTOR_A.Target,saved));
+        advance(10);REQUIRE(s_status==MODE_STATUS_LINK_ERROR && MOTOR_A.Target==0);
+        feed_target(200,0,4500,1);advance(10);REQUIRE(!ModeControl_IsActive());
+        StartTask();advance(10);REQUIRE(s_status==MODE_STATUS_WAIT_COMMAND);
+        feed_target(201,0,0,0);advance(10);REQUIRE(s_status==MODE_STATUS_WAIT_COMMAND);
+        feed_target(202,0,4500,1);advance(10);REQUIRE(s_status==MODE_STATUS_RUNNING);
+        /* CRC errors do not refresh usable time. */
+        {
+            uint8_t bad[14],k;make(bad,203,500,4500,1);bad[2]=3;
+            for(j=0;j<100;j++){for(k=0;k<14;k++) Vision_ProcessByte(bad[k]);advance(10);}
+        }
+        REQUIRE(s_status==MODE_STATUS_LINK_ERROR);
+        /* Millisecond counter wrap and valid X=0. */
+        reset();now_ms=0xFFFFFF00U;feed_target(0,0,4500,1);
+        now_ms+=999U;Vision_GetControlTarget(&usable);REQUIRE(usable.valid && usable.x_centi_cm==0);
+        now_ms++;Vision_GetControlTarget(&usable);REQUIRE(!usable.valid);
     }
     finish(0);
 }

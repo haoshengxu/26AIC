@@ -82,7 +82,7 @@ static void ExecuteCommand(void)
 
 void Vofa_Task(void)
 {
-    VisionTarget target;
+    VisionTarget target, control_target;
     TrackingOutput output;
     TrackingParameters params;
     unsigned int budget = RX_SIZE;
@@ -134,6 +134,7 @@ void Vofa_Task(void)
     frame.channels[12] = accepted;
     frame.channels[13] = rejected;
     Vision_GetTarget(&target);
+    Vision_GetControlTarget(&control_target);
     ModeControl_GetTrackingOutput(&output);
     now = HAL_GetTick();
     frame.channels[14] = target.x_centi_cm * 0.01f;
@@ -143,7 +144,7 @@ void Vofa_Task(void)
     frame.channels[18] = target.has_frame ? (float)(uint32_t)(now-target.received_ms) : -1.0f;
     frame.channels[19] = -target.x_centi_cm * 0.0001f;
     frame.channels[20] = output.steer_left_rad * 57.2957795f;
-    frame.channels[21] = target.valid;
+    frame.channels[21] = control_target.valid;
     Tracking_GetParameters(&params);
     frame.channels[22] = target.y_centi_cm * 0.01f;
     {

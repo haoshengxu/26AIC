@@ -9,6 +9,7 @@
  * a consistent command and counters. No floats, prints or motor writes here. */
 static volatile VisionCommand latest;
 static volatile VisionTarget target_latest;
+static volatile VisionTarget target_control;
 static uint8_t buffer[VISION_FRAME_SIZE], used;
 
 uint16_t Vision_Crc16(const uint8_t *data, uint16_t length)
@@ -27,6 +28,7 @@ void Vision_Init(void)
 {
     memset((void *)&latest, 0, sizeof(latest));
     memset((void *)&target_latest, 0, sizeof(target_latest));
+    memset((void *)&target_control, 0, sizeof(target_control));
     used = 0U;
     Distance_Init();
 }
@@ -51,6 +53,20 @@ void Vision_GetTarget(VisionTarget *out)
         ++target_latest.timeouts;
     }
     *out = target_latest;
+    __set_PRIMASK(mask);
+}
+
+void Vision_GetControlTarget(VisionTarget *out)
+{
+    uint32_t mask = __get_PRIMASK();
+    __disable_irq();
+    if (target_control.valid &&
+        (uint32_t)(HAL_GetTick()-target_control.received_ms) >= VISION_TARGET_HOLD_MS) {
+        target_control.valid = target_control.link_alive = 0U;
+        target_control.x_centi_cm = target_control.y_centi_cm = 0;
+        ++target_control.timeouts;
+    }
+    *out = target_control;
     __set_PRIMASK(mask);
 }
 
@@ -89,6 +105,16 @@ static uint8_t ParseTarget(uint32_t now)
     target_latest.received_ms = now;
     ++target_latest.accepted;
     if (!buffer[6]) { ++target_latest.invalid_frames; ++target_latest.invalid_events; }
+    else {
+        /* Commit XY and receipt time together. Only valid V3 frames refresh
+         * the motion hold, including a valid X=0 and restarted sequence. */
+        target_control.x_centi_cm = (int16_t)x;
+        target_control.y_centi_cm = (int16_t)y;
+        target_control.sequence = seq;
+        target_control.received_ms = now;
+        target_control.has_frame = target_control.link_alive = target_control.valid = 1U;
+        ++target_control.accepted;
+    }
     return 1U;
 }
 
@@ -101,6 +127,8 @@ uint8_t Vision_CanRun(const VisionCommand *cmd, uint32_t now)
 
 void Vision_UartError(void)
 {
+    target_control.valid = target_control.link_alive = 0U;
+    target_control.x_centi_cm = target_control.y_centi_cm = 0;
     target_latest.valid = target_latest.link_alive = 0U;
     target_latest.x_centi_cm = target_latest.y_centi_cm = 0;
     ++target_latest.uart_errors;

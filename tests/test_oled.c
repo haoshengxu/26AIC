@@ -43,6 +43,7 @@ void ModeControl_GetTrackingOutput(TrackingOutput *p) { memset(p,0,sizeof(*p)); 
 void Tracking_GetParameters(TrackingParameters *p) { p->kp=TRACK_KP;p->kd=TRACK_KD;p->stanley_k=TRACK_STANLEY_K;p->speed_mps=TRACK_BASE_SPEED_MPS;p->filter_tau_s=TRACK_D_FILTER_TAU_S; }
 #include "../HARDWARE/vision_command.h"
 void Vision_GetTarget(VisionTarget *p) { memset(p,0,sizeof(*p)); }
+void Vision_GetControlTarget(VisionTarget *p) { memset(p,0,sizeof(*p)); }
 #include "../HARDWARE/oled.c"
 #include "../BALANCE/show.c"
 

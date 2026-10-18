@@ -85,7 +85,7 @@ static void ShowTracking(void)
     VisionTarget target;
     TrackingOutput out;
     char line[48], a[16], b[16];
-    Vision_GetTarget(&target);
+    Vision_GetControlTarget(&target);
     ModeControl_GetTrackingOutput(&out);
     snprintf(line, sizeof(line), "M3 PP %-5s V:%u", StatusText(), (unsigned int)target.valid);
     ShowLine(0U, line);

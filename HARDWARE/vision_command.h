@@ -22,6 +22,7 @@ typedef struct {
 /* V3: signed wire units are 0.01 cm (multiply by 0.0001 for metres).
  * X right-positive, Y forward-positive; no calibration offset is applied. */
 #define VISION_TARGET_TIMEOUT_MS 300U
+#define VISION_TARGET_HOLD_MS 1000U
 typedef struct {
     uint32_t received_ms, accepted, crc_errors, format_errors, uart_errors;
     uint32_t invalid_frames, invalid_events, timeouts, duplicate_frames, sequence_discontinuities;
@@ -32,6 +33,8 @@ typedef struct {
 
 /* Atomic snapshot; also expires stale targets. Invalid/expired coordinates zero. */
 void Vision_GetTarget(VisionTarget *out);
+/* Last valid V3 target, usable for <1000ms; invalid frames do not refresh it. */
+void Vision_GetControlTarget(VisionTarget *out);
 void Vision_Init(void);
 void Vision_ProcessByte(uint8_t byte);
 void Vision_UartError(void);

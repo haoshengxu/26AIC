@@ -35,7 +35,7 @@ static uint32_t s_press_ms;
 static uint32_t s_release_ms;
 static uint8_t s_pending_click;
 static uint8_t s_consumed_press;
-static uint32_t s_arm_accepted, s_arm_stop_events, s_arm_target_invalid_events;
+static uint32_t s_arm_accepted, s_arm_stop_events;
 static float s_debug_left = ACK_DEBUG_DEFAULT_SPEED_MPS;
 static float s_debug_right = ACK_DEBUG_DEFAULT_SPEED_MPS;
 static float s_debug_angle = ACK_DEBUG_DEFAULT_ANGLE_DEG;
@@ -80,11 +80,10 @@ static void StartTask(void)
         uint32_t mask = __get_PRIMASK();
         __disable_irq();
         Vision_Get(&cmd);
-        Vision_GetTarget(&target);
+        Vision_GetControlTarget(&target);
         /* Require a V3 target received after local arming. */
         s_arm_accepted = target.accepted;
         s_arm_stop_events = cmd.stop_events;
-        s_arm_target_invalid_events = target.invalid_events;
         __set_PRIMASK(mask);
         Tracking_Reset(&s_tracking, &s_tracking_output);
         s_start_ms = HAL_GetTick();
@@ -237,15 +236,11 @@ void ModeControl_Tick10ms(void)
         uint32_t mask = __get_PRIMASK();
         __disable_irq();
         Vision_Get(&cmd);
-        Vision_GetTarget(&target);
+        Vision_GetControlTarget(&target);
         Tracking_GetParameters(&params);
         __set_PRIMASK(mask);
         if (cmd.stop_events != s_arm_stop_events) {
             StopTask(MODE_STATUS_REMOTE_STOP);
-            return;
-        }
-        if (target.invalid_events != s_arm_target_invalid_events) {
-            StopTask(MODE_STATUS_LINK_ERROR);
             return;
         }
         if (s_status == MODE_STATUS_WAIT_COMMAND && target.accepted == s_arm_accepted) {

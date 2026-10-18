@@ -6,4 +6,4 @@
 
 tests/test_vofa.c: 1 warning, 0 errors
 
-PASS: vofa; 29 assertions; case 4/4; failure line 0; signature 0xacce5501
+PASS: vofa; 31 assertions; case 4/4; failure line 0; signature 0xacce5501

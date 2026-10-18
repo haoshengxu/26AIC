@@ -13,15 +13,15 @@
 #define ACK_MAX_STEER_RAD            0.35f
 
 /* PC9 / TIM8_CH4: 1 MHz counter, 20 ms period, pulse width in us. */
-/* Mechanical straight-ahead was -2 deg at the old 1500 us origin. */
-#define ACK_SERVO_CENTER_US          1538
+/* Mechanical straight-ahead verified at A=-2 deg from the 1538 us origin. */
+#define ACK_SERVO_CENTER_US          1576
 #define ACK_SERVO_MIN_US             1000
 #define ACK_SERVO_MAX_US             2000
 #define ACK_SERVO_US_PER_RAD         1100.0f
 #define ACK_SERVO_DIRECTION          (-1.0f)
 /* M4 calibration envelope. Normal driving retains its existing limits. */
-#define ACK_DEBUG_MIN_ANGLE_DEG      (-27.0f)
-#define ACK_DEBUG_MAX_ANGLE_DEG      27.0f
+#define ACK_DEBUG_MIN_ANGLE_DEG      (-25.0f)
+#define ACK_DEBUG_MAX_ANGLE_DEG      29.0f
 #define ACK_DEBUG_SERVO_MIN_US       1020
 #define ACK_DEBUG_SERVO_MAX_US       2057
 

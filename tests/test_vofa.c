@@ -35,23 +35,23 @@ void test_entry(void)
     receive_text("M=4;V=0.3;A=0;RUN=1;");
     advance(10);
     REQUIRE(accepted == 4 && rejected == 0 && ModeControl_IsActive());
-    REQUIRE(MOTOR_A.Target == 0.3f && MOTOR_B.Target == 0.3f && Servo == 1538);
+    REQUIRE(MOTOR_A.Target == 0.3f && MOTOR_B.Target == 0.3f && Servo == 1576);
     receive_text("L=0.");
     REQUIRE(ModeControl_DebugLeft() == 0.3f);
     receive_text("25\r\nR=-0.2;A=10;"); advance(10);
     REQUIRE(MOTOR_A.Target == 0.25f && MOTOR_B.Target == -0.2f);
-    receive_text("A=27;"); advance(10);
-    REQUIRE(ModeControl_DebugAngle()==27.0f && Servo==1020 && Servo_PWM==1020);
-    receive_text("A=-27;"); advance(10);
-    REQUIRE(ModeControl_DebugAngle()==-27.0f && Servo==2056 && Servo_PWM==2056);
-    REQUIRE(!ModeControl_DebugCommand("A",27.1f) && ModeControl_DebugAngle()==-27.0f);
-    REQUIRE(!ModeControl_DebugCommand("A",-27.1f) && ModeControl_DebugAngle()==-27.0f);
+    receive_text("A=29;"); advance(10);
+    REQUIRE(ModeControl_DebugAngle()==29.0f && Servo==1020 && Servo_PWM==1020);
+    receive_text("A=-25;"); advance(10);
+    REQUIRE(ModeControl_DebugAngle()==-25.0f && Servo==2056 && Servo_PWM==2056);
+    REQUIRE(!ModeControl_DebugCommand("A",29.1f) && ModeControl_DebugAngle()==-25.0f);
+    REQUIRE(!ModeControl_DebugCommand("A",-25.1f) && ModeControl_DebugAngle()==-25.0f);
     REQUIRE(Ack_ServoPulse(1.0f)==Ack_ServoPulse(ACK_MAX_STEER_RAD));
     receive_text("A=10;"); advance(10);
     receive_text("A=nan;V=inf;L=12;R=2junk;BAD=1;M=2.5;=2;");
     REQUIRE(rejected == 7 && MOTOR_A.Target == 0.25f);
     receive_text("RUN=0;");
-    REQUIRE(!ModeControl_IsActive() && Servo == 1538);
+    REQUIRE(!ModeControl_IsActive() && Servo == 1576);
     case_id = 2;
     for (j = 0; j < 60; ++j) { rx_byte = 'X'; Vofa_RxComplete(); }
     receive_text("RUN=1;V=0.2;");
@@ -90,7 +90,9 @@ void test_entry(void)
         REQUIRE(frame.channels[28]==0.4f && frame.channels[29]==0);
         now_ms+=300;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
         REQUIRE(frame.channels[16]==0 && frame.channels[15]==3 && frame.channels[26]==0);
-        advance(10); REQUIRE(ModeControl_GetStatus()==MODE_STATUS_LINK_ERROR);
+        advance(10); REQUIRE(ModeControl_GetStatus()==MODE_STATUS_RUNNING);
+        REQUIRE(frame.channels[21]==1);
+        advance(650);REQUIRE(ModeControl_GetStatus()==MODE_STATUS_LINK_ERROR);
     }
     finish(0);
 }
