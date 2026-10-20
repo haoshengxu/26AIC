@@ -22,7 +22,7 @@ def main():
     parser.add_argument("--suite", choices=("control", "oled", "vofa", "tracking", "vision", "route"), default="control")
     args = parser.parse_args()
     name = "test_" + args.suite
-    expected_cases = {"control":13,"oled":3,"vofa":6,"tracking":8,"vision":28,"route":9}[args.suite]
+    expected_cases = {"control":13,"oled":3,"vofa":6,"tracking":8,"vision":28,"route":10}[args.suite]
     compiler = Path(args.keil) / "ARM/ARMCC/bin"
     build = ROOT / "tests/build"
     build.mkdir(exist_ok=True)

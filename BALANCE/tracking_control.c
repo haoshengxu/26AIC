@@ -14,7 +14,8 @@ static TrackingParameters parameters = {TRACK_BASE_SPEED_MPS, TRACK_KP,
     TRACK_TURN_X_THRESHOLD_CM, TRACK_TURN_SPEED_GAIN, TRACK_TURN_MIN_SPEED_MPS,
     TRACK_PP_GAIN, TRACK_CURVE_THRESHOLD, TRACK_CURVE_SPEED_GAIN,
     TRACK_SINGLE_SPEED_MPS, TRACK_FALLBACK_SPEED_MPS, TRACK_UNKNOWN_SPEED_MPS,
-    TRACK_HOLD_SPEED_MPS, TRACK_SAT_SPEED_MPS, TRACK_ACCEL_MPS2, TRACK_DECEL_MPS2};
+    TRACK_HOLD_SPEED_MPS, TRACK_SAT_SPEED_MPS, TRACK_ACCEL_MPS2, TRACK_DECEL_MPS2,
+    TRACK_PP_STRAIGHT_GAIN, TRACK_GAIN_CURVE_ENTER, TRACK_GAIN_CURVE_EXIT};
 
 void Tracking_DefaultParameters(void)
 {
@@ -27,6 +28,9 @@ void Tracking_DefaultParameters(void)
     parameters.turn_speed_gain = TRACK_TURN_SPEED_GAIN;
     parameters.turn_min_speed_mps = TRACK_TURN_MIN_SPEED_MPS;
     parameters.pp_gain = TRACK_PP_GAIN;
+    parameters.pp_straight_gain = TRACK_PP_STRAIGHT_GAIN;
+    parameters.gain_curve_enter = TRACK_GAIN_CURVE_ENTER;
+    parameters.gain_curve_exit = TRACK_GAIN_CURVE_EXIT;
     parameters.curve_threshold = TRACK_CURVE_THRESHOLD;
     parameters.curve_speed_gain = TRACK_CURVE_SPEED_GAIN;
     parameters.single_speed_mps = TRACK_SINGLE_SPEED_MPS;
@@ -57,7 +61,15 @@ uint8_t Tracking_SetParameter(const char *key, float value)
     else if (!strcmp(key,"TVMIN") && value >= 0.01f && value <= ACK_MAX_WHEEL_SPEED_MPS)
         parameters.turn_min_speed_mps = value;
     else if (!strcmp(key,"TPG") && value >= 0.5f && value <= 1.5f)
+        { parameters.pp_gain = value; parameters.pp_straight_gain = value; }
+    else if (!strcmp(key,"TPGC") && value >= 0.5f && value <= 1.5f)
         parameters.pp_gain = value;
+    else if (!strcmp(key,"TPGS") && value >= 0.5f && value <= 1.5f)
+        parameters.pp_straight_gain = value;
+    else if (!strcmp(key,"TGEN") && value > parameters.gain_curve_exit && value <= 20.0f)
+        parameters.gain_curve_enter = value;
+    else if (!strcmp(key,"TGEX") && value >= 0.0f && value < parameters.gain_curve_enter)
+        parameters.gain_curve_exit = value;
     else if (!strcmp(key,"TCTH") && value >= 0.0f && value <= 20.0f)
         parameters.curve_threshold = value;
     else if (!strcmp(key,"TCK") && value >= 0.0f && value <= 1.0f)
@@ -106,7 +118,8 @@ uint8_t Tracking_UpdateRoute(TrackingController *controller,
     float measured_speed, const TrackingParameters *p, TrackingOutput *out)
 {
     float x, y, d2, curvature, excess, floor, requested, step;
-    uint8_t fresh, v4;
+    uint8_t fresh, v4, curve_known;
+    float gain;
     memset(out, 0, sizeof(*out));
     if (!control->valid || !control->link_alive ||
         (uint32_t)(now-control->received_ms) >= VISION_TARGET_HOLD_MS ||
@@ -116,25 +129,47 @@ uint8_t Tracking_UpdateRoute(TrackingController *controller,
     if (!Ack_PurePursuitGain(x,y,p->pp_gain,&out->steer_left_rad)) return 0U;
     d2 = x*x+y*y;
     curvature = -2.0f*x/d2; /* left positive; geometry, before gain */
-    out->raw_steer_left_rad = atanf(ACK_WHEELBASE_M*p->pp_gain*curvature);
-    out->control_x_m = out->error_m = x;
-    out->control_y_m = y;
-    out->correction_right_rad = -out->steer_left_rad;
-    out->measured_speed_mps = measured_speed;
-    out->speed_curvature_m_inv = fabsf(p->pp_gain*curvature);
-    out->route_state = TRACK_ROUTE_NORMAL;
     fresh = latest->link_alive && latest->valid &&
         (uint32_t)(now-latest->received_ms) < TRACK_ROUTE_FRESH_MS &&
         (uint32_t)(now-control->received_ms) < TRACK_ROUTE_FRESH_MS;
     v4 = control->version == 4U;
+    curve_known = v4 && latest->version == 4U && latest->link_alive &&
+        (uint32_t)(now-latest->received_ms) < TRACK_ROUTE_FRESH_MS &&
+        latest->endpoint_valid && latest->endpoint_y_centi_cm > 0 && latest->curvature_valid;
+    if (!controller->gain_initialized) {
+        controller->active_pp_gain = p->pp_gain;
+        controller->gain_curve = 1U; /* Unknown startup uses the calibrated curve gain. */
+        controller->gain_initialized = 1U;
+    }
+    gain = p->pp_gain;
+    out->gain_state = 4U;
     if (v4) {
-        /* Endpoint absolute curvature anticipates speed only. It has neither
+        out->gain_state = !fresh ? 3U : !curve_known ? 2U : controller->gain_curve;
+        if (fresh && curve_known) {
+            float road = fminf(latest->endpoint_abs_curvature_cm_inv,1.0f)*100.0f;
+            /* Road curvature, not gain-scaled pursuit error: avoids feedback switching. */
+            if (road >= p->gain_curve_enter) controller->gain_curve = 1U;
+            else if (road <= p->gain_curve_exit) controller->gain_curve = 0U;
+            out->gain_state = controller->gain_curve;
+            gain = controller->gain_curve ? p->pp_gain : p->pp_straight_gain;
+            controller->active_pp_gain += Ack_Clamp(gain-controller->active_pp_gain,
+                -TRACK_GAIN_RATE_PER_S*ACK_CONTROL_DT_S, TRACK_GAIN_RATE_PER_S*ACK_CONTROL_DT_S);
+        }
+        gain = controller->active_pp_gain;
+    } else controller->active_pp_gain = gain;
+    if (!Ack_PurePursuitGain(x,y,gain,&out->steer_left_rad)) return 0U;
+    out->active_pp_gain = gain;
+    out->raw_steer_left_rad = atanf(ACK_WHEELBASE_M*gain*curvature);
+    out->control_x_m = out->error_m = x;
+    out->control_y_m = y;
+    out->correction_right_rad = -out->steer_left_rad;
+    out->measured_speed_mps = measured_speed;
+    out->speed_curvature_m_inv = fabsf(gain*curvature);
+    out->route_state = TRACK_ROUTE_NORMAL;
+    if (v4) {
+        /* Endpoint absolute curvature anticipates speed and selects gain. It has neither
          * direction nor current axle curvature, so never adds steering. Bound
          * before unit conversion to keep even extreme finite wire values safe. */
-        uint8_t curve_known = latest->version == 4U && latest->link_alive &&
-            (uint32_t)(now-latest->received_ms) < TRACK_ROUTE_FRESH_MS &&
-            latest->endpoint_valid && latest->endpoint_y_centi_cm > 0 &&
-            latest->curvature_valid;
         if (curve_known) {
             float road = fminf(latest->endpoint_abs_curvature_cm_inv,1.0f)*100.0f;
             out->speed_curvature_m_inv = fmaxf(out->speed_curvature_m_inv,road);

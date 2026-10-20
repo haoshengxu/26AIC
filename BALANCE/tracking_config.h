@@ -3,13 +3,17 @@
 #include "ackermann_config.h"
 
 /* User-selected VOFA defaults; runtime changes reset to these on reboot. */
-#define TRACK_BASE_SPEED_MPS        0.40f
+#define TRACK_BASE_SPEED_MPS        0.45f
 /* Legacy V3 slowdown: threshold cm, gain (m/s)/cm, shared curve floor m/s. */
 #define TRACK_TURN_X_THRESHOLD_CM   5.0f
 #define TRACK_TURN_SPEED_GAIN       0.020f
-#define TRACK_TURN_MIN_SPEED_MPS    0.23f
+#define TRACK_TURN_MIN_SPEED_MPS    0.30f
 /* V4 route-aware controller. Curvature uses m^-1, speeds use m/s. */
-#define TRACK_PP_GAIN               1.27f
+#define TRACK_PP_GAIN               1.40f /* curve gain */
+#define TRACK_PP_STRAIGHT_GAIN      0.95f
+#define TRACK_GAIN_CURVE_ENTER      0.82f /* m^-1, independent of speed threshold */
+#define TRACK_GAIN_CURVE_EXIT       0.31f /* hysteresis: exit < enter */
+#define TRACK_GAIN_RATE_PER_S       2.0f
 #define TRACK_CURVE_THRESHOLD       0.82f
 #define TRACK_CURVE_SPEED_GAIN      0.08f
 #define TRACK_SINGLE_SPEED_MPS      0.25f
@@ -17,7 +21,7 @@
 #define TRACK_UNKNOWN_SPEED_MPS     0.25f
 #define TRACK_HOLD_SPEED_MPS        0.20f
 #define TRACK_SAT_SPEED_MPS         0.20f
-#define TRACK_ACCEL_MPS2            0.250f
+#define TRACK_ACCEL_MPS2            0.215f
 #define TRACK_DECEL_MPS2            0.80f
 #define TRACK_ROUTE_FRESH_MS        150U
 #define TRACK_KP                    5.45f   /* rad / m */

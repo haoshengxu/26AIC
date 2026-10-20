@@ -7,7 +7,7 @@
 #define HAL_OK 0
 typedef struct { int gState; } UART_HandleTypeDef;
 static UART_HandleTypeDef huart3;
-static uint8_t transmitted[256];
+static uint8_t transmitted[512];
 static unsigned int transmitted_size, tx_count;
 #define __HAL_UART_CLEAR_OREFLAG(h) ((void)(h))
 int HAL_UART_Receive_IT(UART_HandleTypeDef *h, uint8_t *p, unsigned int n)
@@ -67,10 +67,10 @@ void test_entry(void)
     huart3.gState = HAL_UART_STATE_READY;
     now_ms = 100; MOTOR_A.Encoder = 1.5f; MOTOR_B.Encoder = -0.5f;
     Vofa_Task();
-    REQUIRE(transmitted_size == 244 && tx_count == 1);
+    REQUIRE(transmitted_size == 264 && tx_count == 1);
     memcpy(&sample, transmitted, 4); REQUIRE(sample == 1.5f);
     memcpy(&sample, transmitted+4, 4); REQUIRE(sample == -0.5f);
-    REQUIRE(transmitted[240] == 0 && transmitted[241] == 0 && transmitted[242] == 0x80 && transmitted[243] == 0x7f);
+    REQUIRE(transmitted[260] == 0 && transmitted[261] == 0 && transmitted[262] == 0x80 && transmitted[263] == 0x7f);
     now_ms = 200; MOTOR_A.Encoder = 9; Vofa_Task();
     REQUIRE(tx_count == 1 && frame.channels[0] == 1.5f);
     huart3.gState = HAL_UART_STATE_READY; Vofa_Task();
@@ -109,7 +109,7 @@ void test_entry(void)
             REQUIRE(rejected==before+4);
         }
         receive_text("TRESET=1;");Tracking_GetParameters(&p);
-        REQUIRE(p.turn_x_threshold_cm==5 && p.turn_speed_gain==0.020f && p.turn_min_speed_mps==0.23f && p.speed_mps==0.40f);
+        REQUIRE(p.turn_x_threshold_cm==5 && p.turn_speed_gain==0.020f && p.turn_min_speed_mps==0.30f && p.speed_mps==0.45f);
     }
     case_id=6;
     receive_text("TPG=1.1;TCTH=0.9;TCK=0.1;TSINGLE=0.24;TFALL=0.19;TUNKNOWN=0.23;THOLD=0.16;TSAT=0.18;TACC=0.4;TDEC=0.9;");
@@ -118,6 +118,10 @@ void test_entry(void)
         TrackingParameters p;float before=rejected;
         Tracking_GetParameters(&p);REQUIRE(NEAR(p.pp_gain,1.1f,0.0001f) && NEAR(p.hold_speed_mps,0.16f,0.0001f));
         receive_text("TPG=2;TCK=-1;TACC=0;TDEC=6;");REQUIRE(rejected==before+4);
+        receive_text("TPGS=0.9;TPGC=1.2;TGEN=1.0;TGEX=0.5;");
+        Tracking_GetParameters(&p);
+        REQUIRE(NEAR(p.pp_straight_gain,0.9f,0.0001f) && NEAR(p.pp_gain,1.2f,0.0001f));
+        REQUIRE(p.gain_curve_enter==1.0f && p.gain_curve_exit==0.5f);
         receive_text("M=3;RUN=1;");
         for(j=0;j<22;j++) Vision_ProcessByte(v[j]);advance(10);
         now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
@@ -127,7 +131,9 @@ void test_entry(void)
         REQUIRE(frame.channels[42]==TRACK_ROUTE_FALLBACK && frame.channels[43]==3);
         REQUIRE(NEAR(frame.channels[45],0.19f,0.0001f) && NEAR(frame.channels[46],2,0.0001f) && NEAR(frame.channels[47],40,0.0001f));
         REQUIRE(frame.channels[48]==p.pp_gain && frame.channels[56]==p.accel_mps2);
-        REQUIRE(transmitted_size==244 && transmitted[242]==0x80 && transmitted[243]==0x7F);
+        REQUIRE(NEAR(frame.channels[60],0.9f,0.0001f) && frame.channels[61]==1.0f && frame.channels[62]==0.5f);
+        REQUIRE(NEAR(frame.channels[63],1.18f,0.0001f) && frame.channels[64]==0);
+        REQUIRE(transmitted_size==264 && transmitted[262]==0x80 && transmitted[263]==0x7F);
         receive_text("RUN=0;");now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
         REQUIRE(frame.channels[42]==0 && frame.channels[32]==0 && frame.channels[46]==0);
     }

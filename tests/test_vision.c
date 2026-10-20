@@ -340,11 +340,11 @@ void test_entry(void)
         TrackingParameters p; TrackingOutput out;
         float saved, left_speed;
         Tracking_GetParameters(&p);
-        REQUIRE(p.speed_mps==0.40f && p.turn_speed_gain==0.020f && p.turn_min_speed_mps==0.23f && p.turn_x_threshold_cm==5);
-        REQUIRE(NEAR(Tracking_TurnSpeed(0.05f,&p),0.40f));
-        REQUIRE(NEAR(Tracking_TurnSpeed(0.07f,&p),0.36f));
-        REQUIRE(NEAR(Tracking_TurnSpeed(0.09f,&p),0.32f));
-        REQUIRE(NEAR(Tracking_TurnSpeed(-0.50f,&p),0.23f));
+        REQUIRE(p.speed_mps==0.45f && p.turn_speed_gain==0.020f && p.turn_min_speed_mps==0.30f && p.turn_x_threshold_cm==5);
+        REQUIRE(NEAR(Tracking_TurnSpeed(0.05f,&p),0.45f));
+        REQUIRE(NEAR(Tracking_TurnSpeed(0.07f,&p),0.41f));
+        REQUIRE(NEAR(Tracking_TurnSpeed(0.09f,&p),0.37f));
+        REQUIRE(NEAR(Tracking_TurnSpeed(-0.50f,&p),0.30f));
         /* Exercise runtime settings independently of compiled defaults. */
         REQUIRE(ModeControl_DebugCommand("TV",0.25f));
         REQUIRE(ModeControl_DebugCommand("TXK",0.01f));

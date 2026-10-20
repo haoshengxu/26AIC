@@ -32,6 +32,8 @@ static void start_route_fixture(void)
     ModeControl_DebugCommand("TCTH",0.8f);
     ModeControl_DebugCommand("THOLD",0.18f);
     ModeControl_DebugCommand("TACC",0.30f);
+    ModeControl_DebugCommand("TGEN",0.82f);
+    ModeControl_DebugCommand("TGEX",0.60f);
 }
 void test_entry(void)
 {
@@ -76,7 +78,7 @@ void test_entry(void)
     case_id=4;start_route_fixture();
     route_frame(500,4500,7,1,0);advance(10);ModeControl_GetTrackingOutput(&out);angle=out.steer_left_rad;
     REQUIRE(ModeControl_DebugCommand("TPG",1.1f));
-    route_frame(500,4500,7,1,0);advance(10);ModeControl_GetTrackingOutput(&out);
+    route_run(10,500,4500,7,1,0);ModeControl_GetTrackingOutput(&out);
     REQUIRE(NEAR(tanf(out.steer_left_rad),1.1f*tanf(angle)));
     angle=out.steer_left_rad;
     route_frame(500,4500,7,1,0.10f);advance(10);ModeControl_GetTrackingOutput(&out);
@@ -142,8 +144,42 @@ void test_entry(void)
     route_frame(0,4500,7,1,0);advance(10);ModeControl_GetTrackingOutput(&out);
     REQUIRE(NEAR(out.speed_mps,0.003f));
     REQUIRE(ModeControl_DebugCommand("TRESET",1));Tracking_GetParameters(&p);
-    REQUIRE(p.pp_gain==1.27f && p.curve_threshold==0.82f && p.curve_speed_gain==0.08f);
-    REQUIRE(p.fallback_speed_mps==0.20f && p.hold_speed_mps==0.20f && p.accel_mps2==0.250f);
+    REQUIRE(p.pp_gain==1.40f && p.curve_threshold==0.82f && p.curve_speed_gain==0.08f);
+    REQUIRE(p.fallback_speed_mps==0.20f && p.hold_speed_mps==0.20f && p.accel_mps2==0.215f);
     Vision_UartError();advance(10);REQUIRE(!ModeControl_IsActive() && MOTOR_A.Target==0);
+    case_id=10;start_route_fixture();
+    REQUIRE(ModeControl_DebugCommand("TPGS",0.8f));
+    REQUIRE(ModeControl_DebugCommand("TPGC",1.3f));
+    REQUIRE(!ModeControl_DebugCommand("TPGS",0.49f));
+    REQUIRE(!ModeControl_DebugCommand("TPGC",1.51f));
+    REQUIRE(!ModeControl_DebugCommand("TGEN",0.60f));
+    REQUIRE(!ModeControl_DebugCommand("TGEX",0.82f));
+    REQUIRE(ModeControl_DebugCommand("TGEN",1.0f));
+    REQUIRE(ModeControl_DebugCommand("TGEX",0.5f));
+    route_run(40,500,4500,7,1,0);ModeControl_GetTrackingOutput(&out);
+    REQUIRE(out.gain_state==0 && NEAR(out.active_pp_gain,0.8f));
+    angle=out.steer_left_rad;
+    route_frame(500,4500,7,1,0.012f);advance(10);ModeControl_GetTrackingOutput(&out);
+    REQUIRE(out.gain_state==1 && out.active_pp_gain>0.8f && out.active_pp_gain<0.83f);
+    route_run(40,500,4500,7,1,0.012f);ModeControl_GetTrackingOutput(&out);
+    REQUIRE(NEAR(out.active_pp_gain,1.3f));
+    REQUIRE(NEAR(tanf(out.steer_left_rad)/tanf(angle),1.3f/0.8f));
+    route_run(10,500,4500,7,1,0.007f);ModeControl_GetTrackingOutput(&out);
+    REQUIRE(out.gain_state==1 && NEAR(out.active_pp_gain,1.3f)); /* hysteresis */
+    route_run(10,500,4500,3,1,0);ModeControl_GetTrackingOutput(&out);
+    REQUIRE(out.gain_state==2 && NEAR(out.active_pp_gain,1.3f)); /* unknown freezes gain */
+    route_frame(0,0,6,1,0);advance(10);ModeControl_GetTrackingOutput(&out);
+    REQUIRE(out.gain_state==3 && NEAR(out.active_pp_gain,1.3f));
+    route_run(40,500,4500,7,1,0.004f);ModeControl_GetTrackingOutput(&out);
+    REQUIRE(out.gain_state==0 && NEAR(out.active_pp_gain,0.8f));
+    route_run(10,500,4500,7,1,0.007f);ModeControl_GetTrackingOutput(&out);
+    REQUIRE(out.gain_state==0 && NEAR(out.active_pp_gain,0.8f));
+    feed_target(20,500,4500,1);advance(10);ModeControl_GetTrackingOutput(&out);
+    REQUIRE(out.gain_state==4 && NEAR(out.active_pp_gain,1.3f)); /* V3 fixed gain */
+    REQUIRE(ModeControl_DebugCommand("TPG",1.1f));Tracking_GetParameters(&p);
+    REQUIRE(p.pp_gain==1.1f && p.pp_straight_gain==1.1f);
+    REQUIRE(ModeControl_DebugCommand("TRESET",1));Tracking_GetParameters(&p);
+    REQUIRE(p.pp_gain==1.40f && p.pp_straight_gain==0.95f);
+    REQUIRE(p.gain_curve_enter==0.82f && p.gain_curve_exit==0.31f);
     finish(0);
 }
