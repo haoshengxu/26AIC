@@ -15,7 +15,8 @@ static TrackingParameters parameters = {TRACK_BASE_SPEED_MPS, TRACK_KP,
     TRACK_PP_GAIN, TRACK_CURVE_THRESHOLD, TRACK_CURVE_SPEED_GAIN,
     TRACK_SINGLE_SPEED_MPS, TRACK_FALLBACK_SPEED_MPS, TRACK_UNKNOWN_SPEED_MPS,
     TRACK_HOLD_SPEED_MPS, TRACK_SAT_SPEED_MPS, TRACK_ACCEL_MPS2, TRACK_DECEL_MPS2,
-    TRACK_PP_STRAIGHT_GAIN, TRACK_GAIN_CURVE_ENTER, TRACK_GAIN_CURVE_EXIT};
+    TRACK_PP_STRAIGHT_GAIN, TRACK_GAIN_CURVE_ENTER, TRACK_GAIN_CURVE_EXIT,
+    TRACK_START_ACCEL_MPS2};
 
 void Tracking_DefaultParameters(void)
 {
@@ -39,6 +40,7 @@ void Tracking_DefaultParameters(void)
     parameters.hold_speed_mps = TRACK_HOLD_SPEED_MPS;
     parameters.saturated_speed_mps = TRACK_SAT_SPEED_MPS;
     parameters.accel_mps2 = TRACK_ACCEL_MPS2;
+    parameters.start_accel_mps2 = TRACK_START_ACCEL_MPS2;
     parameters.decel_mps2 = TRACK_DECEL_MPS2;
 }
 
@@ -84,6 +86,8 @@ uint8_t Tracking_SetParameter(const char *key, float value)
         parameters.hold_speed_mps = value;
     else if (!strcmp(key,"TSAT") && value >= 0.01f && value <= ACK_MAX_WHEEL_SPEED_MPS)
         parameters.saturated_speed_mps = value;
+    else if (!strcmp(key,"TSTART") && value >= 0.05f && value <= 3.0f)
+        parameters.start_accel_mps2 = value;
     else if (!strcmp(key,"TACC") && value >= 0.05f && value <= 3.0f)
         parameters.accel_mps2 = value;
     else if (!strcmp(key,"TDEC") && value >= 0.05f && value <= 5.0f)
@@ -205,10 +209,17 @@ uint8_t Tracking_UpdateRoute(TrackingController *controller,
             requested = fminf(requested,controller->route_speed_mps);
         }
         out->requested_speed_mps = requested;
-        step = (requested > controller->route_speed_mps ? p->accel_mps2 : p->decel_mps2)*ACK_CONTROL_DT_S;
+        step = (requested > controller->route_speed_mps ?
+            (controller->launch_complete ? p->accel_mps2 : p->start_accel_mps2) :
+            p->decel_mps2)*ACK_CONTROL_DT_S;
         controller->route_speed_mps += Ack_Clamp(requested-controller->route_speed_mps,-step,step);
         out->speed_mps = Ack_Clamp(controller->route_speed_mps,0.0f,p->speed_mps);
         controller->route_speed_mps = out->speed_mps;
+        /* Only a fresh positive target speed can finish the first launch.
+         * Holding stale data must never re-arm or complete the launch phase. */
+        if (fresh && requested > 0.0f && out->speed_mps >= requested)
+            controller->launch_complete = 1U;
+        out->startup_active = !controller->launch_complete;
     } else {
         /* Backward-compatible V3 tuning, including existing TXTH/TXK commands. */
         out->requested_speed_mps = out->speed_mps = Tracking_TurnSpeed(x,p);

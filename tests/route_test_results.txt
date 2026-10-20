@@ -6,4 +6,4 @@
 
 tests/test_route.c: 1 warning, 0 errors
 
-PASS: route; 79 assertions; case 10/10; failure line 0; signature 0xacce5501
+PASS: route; 96 assertions; case 11/11; failure line 0; signature 0xacce5501

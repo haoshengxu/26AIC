@@ -8,7 +8,7 @@
 #include <string.h>
 
 #define RX_SIZE 256U
-#define CHANNELS 65U
+#define CHANNELS 67U
 static uint8_t rx_byte;
 static volatile uint8_t rx_ring[RX_SIZE];
 static volatile unsigned int rx_head, rx_tail, rx_fault;
@@ -179,6 +179,8 @@ void Vofa_Task(void)
     frame.channels[45] = output.requested_speed_mps; /* before speed ramp */
     frame.channels[46] = output.control_x_m*100.0f;
     frame.channels[47] = output.control_y_m*100.0f;
+    frame.channels[65] = params.start_accel_mps2;
+    frame.channels[66] = output.startup_active;
     frame.channels[60] = params.pp_straight_gain;
     frame.channels[61] = params.gain_curve_enter;
     frame.channels[62] = params.gain_curve_exit;

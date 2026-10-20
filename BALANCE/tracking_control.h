@@ -16,7 +16,7 @@ typedef struct {
     uint32_t last_sample_ms, last_frames;
     uint8_t has_sample;
     float route_speed_mps, active_pp_gain;
-    uint8_t gain_initialized, gain_curve;
+    uint8_t gain_initialized, gain_curve, launch_complete;
 } TrackingController;
 
 /* State is the highest-priority active condition; reasons retain all flags. */
@@ -38,6 +38,7 @@ typedef struct {
     float speed_curvature_m_inv, requested_speed_mps;
     uint8_t route_state, route_reasons;
     float active_pp_gain;
+    uint8_t startup_active;
     uint8_t gain_state; /* 0 straight, 1 curve, 2 unknown, 3 hold, 4 V3 */
 } TrackingOutput;
 
@@ -49,6 +50,7 @@ typedef struct {
     float single_speed_mps, fallback_speed_mps, unknown_speed_mps;
     float hold_speed_mps, saturated_speed_mps, accel_mps2, decel_mps2;
     float pp_straight_gain, gain_curve_enter, gain_curve_exit;
+    float start_accel_mps2;
 } TrackingParameters;
 /* 100 Hz M3: V4 route-aware speeds; V3 retains the legacy X speed rule. */
 uint8_t Tracking_UpdateRoute(TrackingController *controller,

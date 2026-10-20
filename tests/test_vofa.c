@@ -67,10 +67,10 @@ void test_entry(void)
     huart3.gState = HAL_UART_STATE_READY;
     now_ms = 100; MOTOR_A.Encoder = 1.5f; MOTOR_B.Encoder = -0.5f;
     Vofa_Task();
-    REQUIRE(transmitted_size == 264 && tx_count == 1);
+    REQUIRE(transmitted_size == 272 && tx_count == 1);
     memcpy(&sample, transmitted, 4); REQUIRE(sample == 1.5f);
     memcpy(&sample, transmitted+4, 4); REQUIRE(sample == -0.5f);
-    REQUIRE(transmitted[260] == 0 && transmitted[261] == 0 && transmitted[262] == 0x80 && transmitted[263] == 0x7f);
+    REQUIRE(transmitted[268] == 0 && transmitted[269] == 0 && transmitted[270] == 0x80 && transmitted[271] == 0x7f);
     now_ms = 200; MOTOR_A.Encoder = 9; Vofa_Task();
     REQUIRE(tx_count == 1 && frame.channels[0] == 1.5f);
     huart3.gState = HAL_UART_STATE_READY; Vofa_Task();
@@ -118,7 +118,7 @@ void test_entry(void)
         TrackingParameters p;float before=rejected;
         Tracking_GetParameters(&p);REQUIRE(NEAR(p.pp_gain,1.1f,0.0001f) && NEAR(p.hold_speed_mps,0.16f,0.0001f));
         receive_text("TPG=2;TCK=-1;TACC=0;TDEC=6;");REQUIRE(rejected==before+4);
-        receive_text("TPGS=0.9;TPGC=1.2;TGEN=1.0;TGEX=0.5;");
+        receive_text("TPGS=0.9;TPGC=1.2;TGEN=1.0;TGEX=0.5;TSTART=0.6;");
         Tracking_GetParameters(&p);
         REQUIRE(NEAR(p.pp_straight_gain,0.9f,0.0001f) && NEAR(p.pp_gain,1.2f,0.0001f));
         REQUIRE(p.gain_curve_enter==1.0f && p.gain_curve_exit==0.5f);
@@ -133,7 +133,8 @@ void test_entry(void)
         REQUIRE(frame.channels[48]==p.pp_gain && frame.channels[56]==p.accel_mps2);
         REQUIRE(NEAR(frame.channels[60],0.9f,0.0001f) && frame.channels[61]==1.0f && frame.channels[62]==0.5f);
         REQUIRE(NEAR(frame.channels[63],1.18f,0.0001f) && frame.channels[64]==0);
-        REQUIRE(transmitted_size==264 && transmitted[262]==0x80 && transmitted[263]==0x7F);
+        REQUIRE(NEAR(frame.channels[65],0.6f,0.0001f) && frame.channels[66]==1);
+        REQUIRE(transmitted_size==272 && transmitted[270]==0x80 && transmitted[271]==0x7F);
         receive_text("RUN=0;");now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
         REQUIRE(frame.channels[42]==0 && frame.channels[32]==0 && frame.channels[46]==0);
     }

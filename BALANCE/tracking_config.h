@@ -22,6 +22,7 @@
 #define TRACK_HOLD_SPEED_MPS        0.20f
 #define TRACK_SAT_SPEED_MPS         0.20f
 #define TRACK_ACCEL_MPS2            0.215f
+#define TRACK_START_ACCEL_MPS2      0.40f
 #define TRACK_DECEL_MPS2            0.80f
 #define TRACK_ROUTE_FRESH_MS        150U
 #define TRACK_KP                    5.45f   /* rad / m */

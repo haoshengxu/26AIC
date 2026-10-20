@@ -32,6 +32,7 @@ static void start_route_fixture(void)
     ModeControl_DebugCommand("TCTH",0.8f);
     ModeControl_DebugCommand("THOLD",0.18f);
     ModeControl_DebugCommand("TACC",0.30f);
+    ModeControl_DebugCommand("TSTART",0.30f);
     ModeControl_DebugCommand("TGEN",0.82f);
     ModeControl_DebugCommand("TGEX",0.60f);
 }
@@ -181,5 +182,33 @@ void test_entry(void)
     REQUIRE(ModeControl_DebugCommand("TRESET",1));Tracking_GetParameters(&p);
     REQUIRE(p.pp_gain==1.40f && p.pp_straight_gain==0.95f);
     REQUIRE(p.gain_curve_enter==0.82f && p.gain_curve_exit==0.31f);
+    case_id=11;start_route_fixture();
+    REQUIRE(ModeControl_DebugCommand("TSTART",0.5f));
+    REQUIRE(ModeControl_DebugCommand("TACC",0.1f));
+    REQUIRE(ModeControl_DebugCommand("TV",0.30f));
+    REQUIRE(ModeControl_DebugCommand("TVMIN",0.10f));
+    REQUIRE(!ModeControl_DebugCommand("TSTART",0) && !ModeControl_DebugCommand("TSTART",3.1f));
+    route_frame(0,4500,7,1,0);advance(10);ModeControl_GetTrackingOutput(&out);
+    REQUIRE(out.startup_active && NEAR(out.speed_mps,0.005f));
+    route_run(65,0,4500,7,1,0);ModeControl_GetTrackingOutput(&out);
+    REQUIRE(!out.startup_active && NEAR(out.speed_mps,0.30f));
+    REQUIRE(ModeControl_DebugCommand("TV",0.40f));
+    route_frame(0,4500,7,1,0);advance(10);ModeControl_GetTrackingOutput(&out);
+    REQUIRE(!out.startup_active && NEAR(out.speed_mps,0.301f));
+    route_run(50,0,4500,15,1,0);ModeControl_GetTrackingOutput(&out);
+    REQUIRE(!out.startup_active && NEAR(out.speed_mps,0.20f));
+    route_run(20,0,0,6,1,0);ModeControl_GetTrackingOutput(&out);
+    REQUIRE(!out.startup_active && out.route_state==TRACK_ROUTE_HOLD);
+    speed=out.speed_mps;
+    route_frame(0,4500,7,1,0);advance(10);ModeControl_GetTrackingOutput(&out);
+    REQUIRE(!out.startup_active && NEAR(out.speed_mps,speed+0.001f));
+    REQUIRE(ModeControl_DebugCommand("RUN",0) && ModeControl_DebugCommand("RUN",1));
+    route_frame(0,4500,7,1,0);advance(10);ModeControl_GetTrackingOutput(&out);
+    REQUIRE(out.startup_active && NEAR(out.speed_mps,0.005f));
+    speed=out.speed_mps;
+    route_run(30,0,0,6,1,0);ModeControl_GetTrackingOutput(&out);
+    REQUIRE(out.startup_active && out.speed_mps<=speed); /* hold cannot complete launch */
+    REQUIRE(ModeControl_DebugCommand("TRESET",1));Tracking_GetParameters(&p);
+    REQUIRE(p.start_accel_mps2==0.40f && p.accel_mps2==0.215f);
     finish(0);
 }
