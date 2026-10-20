@@ -142,8 +142,8 @@ void test_entry(void)
     route_frame(0,4500,7,1,0);advance(10);ModeControl_GetTrackingOutput(&out);
     REQUIRE(NEAR(out.speed_mps,0.003f));
     REQUIRE(ModeControl_DebugCommand("TRESET",1));Tracking_GetParameters(&p);
-    REQUIRE(p.pp_gain==1.42f && p.curve_threshold==0.82f && p.curve_speed_gain==0.08f);
-    REQUIRE(p.fallback_speed_mps==0.20f && p.hold_speed_mps==0.20f && p.accel_mps2==0.255f);
+    REQUIRE(p.pp_gain==1.27f && p.curve_threshold==0.82f && p.curve_speed_gain==0.08f);
+    REQUIRE(p.fallback_speed_mps==0.20f && p.hold_speed_mps==0.20f && p.accel_mps2==0.250f);
     Vision_UartError();advance(10);REQUIRE(!ModeControl_IsActive() && MOTOR_A.Target==0);
     finish(0);
 }

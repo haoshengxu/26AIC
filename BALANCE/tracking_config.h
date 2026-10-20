@@ -9,7 +9,7 @@
 #define TRACK_TURN_SPEED_GAIN       0.020f
 #define TRACK_TURN_MIN_SPEED_MPS    0.23f
 /* V4 route-aware controller. Curvature uses m^-1, speeds use m/s. */
-#define TRACK_PP_GAIN               1.42f
+#define TRACK_PP_GAIN               1.27f
 #define TRACK_CURVE_THRESHOLD       0.82f
 #define TRACK_CURVE_SPEED_GAIN      0.08f
 #define TRACK_SINGLE_SPEED_MPS      0.25f
@@ -17,7 +17,7 @@
 #define TRACK_UNKNOWN_SPEED_MPS     0.25f
 #define TRACK_HOLD_SPEED_MPS        0.20f
 #define TRACK_SAT_SPEED_MPS         0.20f
-#define TRACK_ACCEL_MPS2            0.255f
+#define TRACK_ACCEL_MPS2            0.250f
 #define TRACK_DECEL_MPS2            0.80f
 #define TRACK_ROUTE_FRESH_MS        150U
 #define TRACK_KP                    5.45f   /* rad / m */
