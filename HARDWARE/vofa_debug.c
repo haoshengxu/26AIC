@@ -8,7 +8,7 @@
 #include <string.h>
 
 #define RX_SIZE 256U
-#define CHANNELS 34U
+#define CHANNELS 60U
 static uint8_t rx_byte;
 static volatile uint8_t rx_ring[RX_SIZE];
 static volatile unsigned int rx_head, rx_tail, rx_fault;
@@ -165,6 +165,32 @@ void Vofa_Task(void)
     frame.channels[33] = output.valid &&
         (output.correction_right_rad >= TRACK_STEER_LIMIT_RAD ||
          output.correction_right_rad <= -TRACK_STEER_LIMIT_RAD) ? 1.0f : 0.0f;
+    frame.channels[34] = target.version;
+    frame.channels[35] = target.mode;
+    frame.channels[36] = target.fallback;
+    frame.channels[37] = target.endpoint_valid;
+    frame.channels[38] = target.endpoint_x_centi_cm*0.01f;
+    frame.channels[39] = target.endpoint_y_centi_cm*0.01f;
+    frame.channels[40] = target.curvature_valid;
+    frame.channels[41] = target.endpoint_abs_curvature_cm_inv; /* wire cm^-1 */
+    frame.channels[42] = output.route_state;
+    frame.channels[43] = output.route_reasons;
+    frame.channels[44] = output.speed_curvature_m_inv;
+    frame.channels[45] = output.requested_speed_mps; /* before speed ramp */
+    frame.channels[46] = output.control_x_m*100.0f;
+    frame.channels[47] = output.control_y_m*100.0f;
+    frame.channels[48] = params.pp_gain;
+    frame.channels[49] = params.curve_threshold;
+    frame.channels[50] = params.curve_speed_gain;
+    frame.channels[51] = params.single_speed_mps;
+    frame.channels[52] = params.fallback_speed_mps;
+    frame.channels[53] = params.unknown_speed_mps;
+    frame.channels[54] = params.hold_speed_mps;
+    frame.channels[55] = params.saturated_speed_mps;
+    frame.channels[56] = params.accel_mps2;
+    frame.channels[57] = params.decel_mps2;
+    frame.channels[58] = output.raw_steer_left_rad*57.2957795f;
+    frame.channels[59] = control_target.has_frame ? (float)(uint32_t)(now-control_target.received_ms) : -1.0f;
     __set_PRIMASK(mask);
     if (HAL_UART_Transmit_IT(&huart3, (uint8_t *)&frame, sizeof(frame)) == HAL_OK)
         last_tx = now;

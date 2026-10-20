@@ -3,11 +3,23 @@
 #include "ackermann_config.h"
 
 /* User-selected VOFA defaults; runtime changes reset to these on reboot. */
-#define TRACK_BASE_SPEED_MPS        0.35f
-/* M3 turn slowdown: threshold cm, gain (m/s)/cm, floor m/s. */
+#define TRACK_BASE_SPEED_MPS        0.40f
+/* Legacy V3 slowdown: threshold cm, gain (m/s)/cm, shared curve floor m/s. */
 #define TRACK_TURN_X_THRESHOLD_CM   5.0f
 #define TRACK_TURN_SPEED_GAIN       0.020f
-#define TRACK_TURN_MIN_SPEED_MPS    0.27f
+#define TRACK_TURN_MIN_SPEED_MPS    0.23f
+/* V4 route-aware controller. Curvature uses m^-1, speeds use m/s. */
+#define TRACK_PP_GAIN               1.42f
+#define TRACK_CURVE_THRESHOLD       0.82f
+#define TRACK_CURVE_SPEED_GAIN      0.08f
+#define TRACK_SINGLE_SPEED_MPS      0.25f
+#define TRACK_FALLBACK_SPEED_MPS    0.20f
+#define TRACK_UNKNOWN_SPEED_MPS     0.25f
+#define TRACK_HOLD_SPEED_MPS        0.20f
+#define TRACK_SAT_SPEED_MPS         0.20f
+#define TRACK_ACCEL_MPS2            0.255f
+#define TRACK_DECEL_MPS2            0.80f
+#define TRACK_ROUTE_FRESH_MS        150U
 #define TRACK_KP                    5.45f   /* rad / m */
 #define TRACK_KD                    0.30f  /* rad s / m */
 #define TRACK_STANLEY_K             0.6f   /* 1 / s */

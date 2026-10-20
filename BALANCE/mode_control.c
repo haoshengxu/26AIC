@@ -81,7 +81,7 @@ static void StartTask(void)
         __disable_irq();
         Vision_Get(&cmd);
         Vision_GetControlTarget(&target);
-        /* Require a V3 target received after local arming. */
+        /* Require a V3/V4 target received after local arming. */
         s_arm_accepted = target.accepted;
         s_arm_stop_events = cmd.stop_events;
         __set_PRIMASK(mask);
@@ -230,13 +230,13 @@ void ModeControl_Tick10ms(void)
     yaw = Gyro6_GetYaw();
     if (s_mode == MODE_CONTROL_VISION_LINE) {
         VisionCommand cmd;
-        VisionTarget target;
+        VisionTarget target, latest_route;
         TrackingParameters params;
-        float x, y;
         uint32_t mask = __get_PRIMASK();
         __disable_irq();
         Vision_Get(&cmd);
         Vision_GetControlTarget(&target);
+        Vision_GetTarget(&latest_route);
         Tracking_GetParameters(&params);
         __set_PRIMASK(mask);
         if (cmd.stop_events != s_arm_stop_events) {
@@ -253,19 +253,12 @@ void ModeControl_Tick10ms(void)
             StartBuzzer(ERROR_BEEP_MS);
             return;
         }
-        x = target.x_centi_cm * 0.0001f;
-        y = target.y_centi_cm * 0.0001f;
-        memset(&s_tracking_output, 0, sizeof(s_tracking_output));
-        if (!Ack_PurePursuit(x, y, &s_tracking_output.steer_left_rad)) {
+        if (!Tracking_UpdateRoute(&s_tracking, &target, &latest_route, now,
+                0.5f*(MOTOR_A.Encoder+MOTOR_B.Encoder), &params, &s_tracking_output)) {
             StopTask(MODE_STATUS_CONTROL_ERROR);
             StartBuzzer(ERROR_BEEP_MS);
             return;
         }
-        s_tracking_output.error_m = x; /* Target X, not cross-track error. */
-        s_tracking_output.measured_speed_mps = 0.5f*(MOTOR_A.Encoder+MOTOR_B.Encoder);
-        s_tracking_output.correction_right_rad = -s_tracking_output.steer_left_rad;
-        s_tracking_output.speed_mps = Tracking_TurnSpeed(x, &params);
-        s_tracking_output.valid = 1U;
         s_status = MODE_STATUS_RUNNING;
         /* Drive_Motor -> Ack_Kinematics + Ack_ServoPulse; balance.c keeps
          * the original incremental wheel-speed PI and PWM protection. */

@@ -11,7 +11,10 @@ static volatile uint32_t tracking_path_ms;
 static volatile uint8_t tracking_path_valid;
 static TrackingParameters parameters = {TRACK_BASE_SPEED_MPS, TRACK_KP,
     TRACK_KD, TRACK_STANLEY_K, TRACK_D_FILTER_TAU_S,
-    TRACK_TURN_X_THRESHOLD_CM, TRACK_TURN_SPEED_GAIN, TRACK_TURN_MIN_SPEED_MPS};
+    TRACK_TURN_X_THRESHOLD_CM, TRACK_TURN_SPEED_GAIN, TRACK_TURN_MIN_SPEED_MPS,
+    TRACK_PP_GAIN, TRACK_CURVE_THRESHOLD, TRACK_CURVE_SPEED_GAIN,
+    TRACK_SINGLE_SPEED_MPS, TRACK_FALLBACK_SPEED_MPS, TRACK_UNKNOWN_SPEED_MPS,
+    TRACK_HOLD_SPEED_MPS, TRACK_SAT_SPEED_MPS, TRACK_ACCEL_MPS2, TRACK_DECEL_MPS2};
 
 void Tracking_DefaultParameters(void)
 {
@@ -23,6 +26,16 @@ void Tracking_DefaultParameters(void)
     parameters.turn_x_threshold_cm = TRACK_TURN_X_THRESHOLD_CM;
     parameters.turn_speed_gain = TRACK_TURN_SPEED_GAIN;
     parameters.turn_min_speed_mps = TRACK_TURN_MIN_SPEED_MPS;
+    parameters.pp_gain = TRACK_PP_GAIN;
+    parameters.curve_threshold = TRACK_CURVE_THRESHOLD;
+    parameters.curve_speed_gain = TRACK_CURVE_SPEED_GAIN;
+    parameters.single_speed_mps = TRACK_SINGLE_SPEED_MPS;
+    parameters.fallback_speed_mps = TRACK_FALLBACK_SPEED_MPS;
+    parameters.unknown_speed_mps = TRACK_UNKNOWN_SPEED_MPS;
+    parameters.hold_speed_mps = TRACK_HOLD_SPEED_MPS;
+    parameters.saturated_speed_mps = TRACK_SAT_SPEED_MPS;
+    parameters.accel_mps2 = TRACK_ACCEL_MPS2;
+    parameters.decel_mps2 = TRACK_DECEL_MPS2;
 }
 
 void Tracking_GetParameters(TrackingParameters *out)
@@ -43,6 +56,26 @@ uint8_t Tracking_SetParameter(const char *key, float value)
         parameters.turn_speed_gain = value;
     else if (!strcmp(key,"TVMIN") && value >= 0.01f && value <= ACK_MAX_WHEEL_SPEED_MPS)
         parameters.turn_min_speed_mps = value;
+    else if (!strcmp(key,"TPG") && value >= 0.5f && value <= 1.5f)
+        parameters.pp_gain = value;
+    else if (!strcmp(key,"TCTH") && value >= 0.0f && value <= 20.0f)
+        parameters.curve_threshold = value;
+    else if (!strcmp(key,"TCK") && value >= 0.0f && value <= 1.0f)
+        parameters.curve_speed_gain = value;
+    else if (!strcmp(key,"TSINGLE") && value >= 0.01f && value <= ACK_MAX_WHEEL_SPEED_MPS)
+        parameters.single_speed_mps = value;
+    else if (!strcmp(key,"TFALL") && value >= 0.01f && value <= ACK_MAX_WHEEL_SPEED_MPS)
+        parameters.fallback_speed_mps = value;
+    else if (!strcmp(key,"TUNKNOWN") && value >= 0.01f && value <= ACK_MAX_WHEEL_SPEED_MPS)
+        parameters.unknown_speed_mps = value;
+    else if (!strcmp(key,"THOLD") && value >= 0.01f && value <= ACK_MAX_WHEEL_SPEED_MPS)
+        parameters.hold_speed_mps = value;
+    else if (!strcmp(key,"TSAT") && value >= 0.01f && value <= ACK_MAX_WHEEL_SPEED_MPS)
+        parameters.saturated_speed_mps = value;
+    else if (!strcmp(key,"TACC") && value >= 0.05f && value <= 3.0f)
+        parameters.accel_mps2 = value;
+    else if (!strcmp(key,"TDEC") && value >= 0.05f && value <= 5.0f)
+        parameters.decel_mps2 = value;
     else if (!strcmp(key,"TKP") && value >= 0.0f && value <= 10.0f)
         parameters.kp = value;
     else if (!strcmp(key,"TKD") && value >= 0.0f && value <= 2.0f)
@@ -66,6 +99,92 @@ float Tracking_TurnSpeed(float x_right_m, const TrackingParameters *p)
 static uint8_t Tracking_Finite(float value)
 {
     return value == value && value <= FLT_MAX && value >= -FLT_MAX;
+}
+
+uint8_t Tracking_UpdateRoute(TrackingController *controller,
+    const VisionTarget *control, const VisionTarget *latest, uint32_t now,
+    float measured_speed, const TrackingParameters *p, TrackingOutput *out)
+{
+    float x, y, d2, curvature, excess, floor, requested, step;
+    uint8_t fresh, v4;
+    memset(out, 0, sizeof(*out));
+    if (!control->valid || !control->link_alive ||
+        (uint32_t)(now-control->received_ms) >= VISION_TARGET_HOLD_MS ||
+        !Tracking_Finite(measured_speed)) return 0U;
+    x = control->x_centi_cm*0.0001f;
+    y = control->y_centi_cm*0.0001f;
+    if (!Ack_PurePursuitGain(x,y,p->pp_gain,&out->steer_left_rad)) return 0U;
+    d2 = x*x+y*y;
+    curvature = -2.0f*x/d2; /* left positive; geometry, before gain */
+    out->raw_steer_left_rad = atanf(ACK_WHEELBASE_M*p->pp_gain*curvature);
+    out->control_x_m = out->error_m = x;
+    out->control_y_m = y;
+    out->correction_right_rad = -out->steer_left_rad;
+    out->measured_speed_mps = measured_speed;
+    out->speed_curvature_m_inv = fabsf(p->pp_gain*curvature);
+    out->route_state = TRACK_ROUTE_NORMAL;
+    fresh = latest->link_alive && latest->valid &&
+        (uint32_t)(now-latest->received_ms) < TRACK_ROUTE_FRESH_MS &&
+        (uint32_t)(now-control->received_ms) < TRACK_ROUTE_FRESH_MS;
+    v4 = control->version == 4U;
+    if (v4) {
+        /* Endpoint absolute curvature anticipates speed only. It has neither
+         * direction nor current axle curvature, so never adds steering. Bound
+         * before unit conversion to keep even extreme finite wire values safe. */
+        uint8_t curve_known = latest->version == 4U && latest->link_alive &&
+            (uint32_t)(now-latest->received_ms) < TRACK_ROUTE_FRESH_MS &&
+            latest->endpoint_valid && latest->endpoint_y_centi_cm > 0 &&
+            latest->curvature_valid;
+        if (curve_known) {
+            float road = fminf(latest->endpoint_abs_curvature_cm_inv,1.0f)*100.0f;
+            out->speed_curvature_m_inv = fmaxf(out->speed_curvature_m_inv,road);
+        }
+        floor = fminf(p->turn_min_speed_mps,p->speed_mps);
+        excess = fmaxf(out->speed_curvature_m_inv-p->curve_threshold,0.0f);
+        requested = Ack_Clamp(p->speed_mps-p->curve_speed_gain*excess,floor,p->speed_mps);
+        if (control->mode == 2U || control->mode == 3U) {
+            out->route_reasons |= TRACK_REASON_SINGLE;
+            out->route_state = TRACK_ROUTE_SINGLE;
+            requested = fminf(requested,p->single_speed_mps);
+        }
+        if (!curve_known) {
+            out->route_reasons |= TRACK_REASON_UNKNOWN;
+            out->route_state = TRACK_ROUTE_UNKNOWN;
+            requested = fminf(requested,p->unknown_speed_mps);
+        }
+        if (control->fallback) {
+            out->route_reasons |= TRACK_REASON_FALLBACK;
+            out->route_state = TRACK_ROUTE_FALLBACK;
+            requested = fminf(requested,p->fallback_speed_mps);
+        }
+        if (fabsf(out->raw_steer_left_rad) >= ACK_MAX_STEER_RAD) {
+            out->route_reasons |= TRACK_REASON_SATURATED;
+            out->route_state = TRACK_ROUTE_SATURATED;
+            requested = fminf(requested,p->saturated_speed_mps);
+        }
+        if (!fresh) {
+            out->route_reasons |= TRACK_REASON_HOLD;
+            out->route_state = TRACK_ROUTE_HOLD;
+            requested = fminf(requested,p->hold_speed_mps);
+            /* Never accelerate on stale/invalid vision, even during startup. */
+            requested = fminf(requested,controller->route_speed_mps);
+        }
+        out->requested_speed_mps = requested;
+        step = (requested > controller->route_speed_mps ? p->accel_mps2 : p->decel_mps2)*ACK_CONTROL_DT_S;
+        controller->route_speed_mps += Ack_Clamp(requested-controller->route_speed_mps,-step,step);
+        out->speed_mps = Ack_Clamp(controller->route_speed_mps,0.0f,p->speed_mps);
+        controller->route_speed_mps = out->speed_mps;
+    } else {
+        /* Backward-compatible V3 tuning, including existing TXTH/TXK commands. */
+        out->requested_speed_mps = out->speed_mps = Tracking_TurnSpeed(x,p);
+        controller->route_speed_mps = out->speed_mps;
+        if (!fresh) {
+            out->route_reasons |= TRACK_REASON_HOLD;
+            out->route_state = TRACK_ROUTE_HOLD;
+        }
+    }
+    out->valid = 1U;
+    return 1U;
 }
 
 void Tracking_InputInit(void)

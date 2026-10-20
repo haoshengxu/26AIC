@@ -118,6 +118,23 @@ static void feed_target(uint16_t seq, int16_t x, int16_t y, uint8_t valid)
     crc=Vision_Crc16(f,12);f[12]=(uint8_t)crc;f[13]=(uint8_t)(crc>>8);
     for(j=0;j<14;j++) Vision_ProcessByte(f[j]);
 }
+static const uint8_t v4_examples[4][22] = {
+    {0xAA,0x55,4,22,1,0,7,1,0xF4,1,0x94,0x11,0xE8,3,0x64,0x19,0x0A,0xD7,0xA3,0x3C,0xDD,0},
+    {0xAA,0x55,4,22,2,0,15,2,0xC8,0,0xA0,0x0F,0x2C,1,0x30,0x11,0,0,0,0,0x26,0x5C},
+    {0xAA,0x55,4,22,3,0,6,3,0,0,0,0,0x2C,1,0x30,0x11,0x0A,0xD7,0xA3,0x3C,0x12,0x3F},
+    {0xAA,0x55,4,22,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0x2B,0xF7}
+};
+static void send_bytes(const uint8_t *bytes, unsigned int count)
+{
+    unsigned int j;
+    for(j=0;j<count;j++) Vision_ProcessByte(bytes[j]);
+}
+static void send_v4(uint8_t *bytes)
+{
+    uint16_t crc=Vision_Crc16(bytes,20);
+    bytes[20]=(uint8_t)crc; bytes[21]=(uint8_t)(crc>>8);
+    send_bytes(bytes,22);
+}
 static void press(void) { user_key=GPIO_PIN_RESET;advance(60);user_key=GPIO_PIN_SET;advance(100); }
 static void single(void) { press();advance(310); }
 static void double_click(void) { press();press();advance(310); }
@@ -163,7 +180,7 @@ void test_entry(void)
     REQUIRE(s_status==MODE_STATUS_RUNNING && NEAR(MOTOR_A.Target,TRACK_BASE_SPEED_MPS));
     case_id=6;start_m3();feed_target(1,500,4500,1);advance(10);
     REQUIRE(MOTOR_A.Target>MOTOR_B.Target && Servo>SERVO_INIT);
-    Ack_Kinematics(TRACK_BASE_SPEED_MPS,atanf(-2*0.145f*0.05f/(0.05f*0.05f+0.45f*0.45f)),&l,&r);
+    Ack_Kinematics(TRACK_BASE_SPEED_MPS,atanf(-2*0.145f*TRACK_PP_GAIN*0.05f/(0.05f*0.05f+0.45f*0.45f)),&l,&r);
     REQUIRE(NEAR(MOTOR_A.Target,l) && NEAR(MOTOR_B.Target,r));
     feed_target(2,-500,4500,1);advance(10);REQUIRE(MOTOR_A.Target<MOTOR_B.Target && Servo<SERVO_INIT);
     case_id=7;advance(1000);REQUIRE(s_status==MODE_STATUS_LINK_ERROR && MOTOR_A.Target==0 && Servo==SERVO_INIT);
@@ -323,11 +340,11 @@ void test_entry(void)
         TrackingParameters p; TrackingOutput out;
         float saved, left_speed;
         Tracking_GetParameters(&p);
-        REQUIRE(p.speed_mps==0.35f && p.turn_speed_gain==0.020f && p.turn_min_speed_mps==0.27f && p.turn_x_threshold_cm==5);
-        REQUIRE(NEAR(Tracking_TurnSpeed(0.05f,&p),0.35f));
-        REQUIRE(NEAR(Tracking_TurnSpeed(0.07f,&p),0.31f));
-        REQUIRE(NEAR(Tracking_TurnSpeed(0.09f,&p),0.27f));
-        REQUIRE(NEAR(Tracking_TurnSpeed(-0.50f,&p),0.27f));
+        REQUIRE(p.speed_mps==0.40f && p.turn_speed_gain==0.020f && p.turn_min_speed_mps==0.23f && p.turn_x_threshold_cm==5);
+        REQUIRE(NEAR(Tracking_TurnSpeed(0.05f,&p),0.40f));
+        REQUIRE(NEAR(Tracking_TurnSpeed(0.07f,&p),0.36f));
+        REQUIRE(NEAR(Tracking_TurnSpeed(0.09f,&p),0.32f));
+        REQUIRE(NEAR(Tracking_TurnSpeed(-0.50f,&p),0.23f));
         /* Exercise runtime settings independently of compiled defaults. */
         REQUIRE(ModeControl_DebugCommand("TV",0.25f));
         REQUIRE(ModeControl_DebugCommand("TXK",0.01f));
@@ -363,6 +380,95 @@ void test_entry(void)
         /* M4 wheel targets do not use M3 turn slowdown. */
         REQUIRE(ModeControl_DebugCommand("M",4));REQUIRE(ModeControl_DebugCommand("RUN",1));
         advance(10);REQUIRE(NEAR(MOTOR_A.Target,0.3f) && NEAR(MOTOR_B.Target,0.3f));
+    }
+    case_id=26;reset();
+    {
+        VisionTarget t, held; VisionCommand cmd;
+        unsigned int j;
+        /* Literal sender examples validate the wire CRC, endian and float. */
+        send_bytes(v4_examples[0],7);Vision_GetTarget(&t);REQUIRE(!t.has_frame);
+        send_bytes(v4_examples[0]+7,15);Vision_GetTarget(&t);
+        REQUIRE(t.version==4 && t.flags==7 && t.mode==1 && t.valid && !t.fallback);
+        REQUIRE(t.x_centi_cm==500 && t.y_centi_cm==4500);
+        REQUIRE(t.endpoint_valid && t.endpoint_x_centi_cm==1000 && t.endpoint_y_centi_cm==6500);
+        REQUIRE(t.curvature_valid && NEAR(t.endpoint_abs_curvature_cm_inv,0.02f));
+        send_bytes(v4_examples[1],22);Vision_GetTarget(&t);
+        REQUIRE(t.valid && t.mode==2 && t.fallback && t.curvature_valid);
+        REQUIRE(t.endpoint_abs_curvature_cm_inv==0 && t.x_centi_cm==200 && t.y_centi_cm==4000);
+        now_ms=100;send_bytes(v4_examples[2],22);Vision_GetTarget(&t);Vision_GetControlTarget(&held);
+        REQUIRE(!t.valid && t.link_alive && !t.x_centi_cm && !t.y_centi_cm && t.mode==3);
+        REQUIRE(t.endpoint_valid && t.curvature_valid && t.endpoint_y_centi_cm==4400);
+        REQUIRE(held.valid && held.sequence==2 && held.received_ms==0 && held.fallback);
+        send_bytes(v4_examples[3],22);Vision_GetTarget(&t);
+        REQUIRE(t.link_alive && !t.valid && !t.mode && !t.endpoint_valid && !t.curvature_valid);
+        REQUIRE(!t.endpoint_x_centi_cm && !t.endpoint_y_centi_cm && t.endpoint_abs_curvature_cm_inv==0);
+        REQUIRE(t.accepted==4 && t.invalid_frames==2);
+        Vision_Get(&cmd);REQUIRE(!cmd.accepted && !cmd.stop_events);
+        /* Invalid targets cannot start M3, even with valid endpoint information. */
+        start_m3();send_bytes(v4_examples[2],22);advance(10);
+        REQUIRE(s_status==MODE_STATUS_WAIT_COMMAND);
+        send_bytes(v4_examples[0],22);advance(10);
+        REQUIRE(s_status==MODE_STATUS_RUNNING && MOTOR_A.Target>MOTOR_B.Target);
+        for(j=0;j<98;j++){send_bytes(v4_examples[2],22);advance(10);}
+        REQUIRE(s_status==MODE_STATUS_RUNNING);
+        advance(10);REQUIRE(s_status==MODE_STATUS_LINK_ERROR && MOTOR_A.Target==0);
+    }
+    case_id=27;reset();
+    {
+        uint8_t v[22]; VisionTarget t; unsigned int j;
+        for(j=0;j<11;j++) {
+            memcpy(v,v4_examples[0],22);
+            if(j==0) v[6]|=0x10;                 /* reserved */
+            if(j==1) v[7]=4;                    /* mode */
+            if(j==2) v[7]=0;                    /* lost mode with valid bits */
+            if(j==3) v[6]=5;                    /* curvature needs endpoint */
+            if(j==4) v[6]=8;                    /* fallback needs target */
+            if(j==5) v[10]=v[11]=0;             /* target behind/origin */
+            if(j==6) v[11]=0xFF;
+            if(j>=7) {                         /* Inf, NaN, negative, -Inf */
+                uint32_t bad=j==7?0x7F800000U:j==8?0x7FC00000U:j==9?0xBC23D70AU:0xFF800000U;
+                v[16]=(uint8_t)bad;v[17]=(uint8_t)(bad>>8);
+                v[18]=(uint8_t)(bad>>16);v[19]=(uint8_t)(bad>>24);
+            }
+            send_v4(v);Vision_GetTarget(&t);
+            REQUIRE(!t.has_frame && t.format_errors==j+1);
+        }
+        /* Unflagged fields are ignored and zeroed, never reused. */
+        memcpy(v,v4_examples[0],22);v[6]=2;v[14]=0x00;v[15]=0x80;
+        v[16]=v[17]=0;v[18]=0xC0;v[19]=0x7F;send_v4(v);Vision_GetTarget(&t);
+        REQUIRE(!t.valid && t.endpoint_valid && !t.curvature_valid && !t.x_centi_cm);
+        REQUIRE(t.endpoint_y_centi_cm==-32768 && t.endpoint_abs_curvature_cm_inv==0);
+        memcpy(v,v4_examples[0],22);v[6]=1;send_v4(v);Vision_GetTarget(&t);
+        REQUIRE(t.valid && !t.endpoint_valid && !t.curvature_valid && !t.endpoint_x_centi_cm);
+        /* V3 reception clears V4 metadata in both snapshots. */
+        feed_target(5,-500,4500,1);Vision_GetTarget(&t);
+        REQUIRE(t.version==3 && t.x_centi_cm==-500 && !t.mode && !t.endpoint_valid);
+        Vision_GetControlTarget(&t);REQUIRE(!t.curvature_valid && !t.endpoint_x_centi_cm);
+    }
+    case_id=28;reset();
+    {
+        uint8_t v[22]; VisionTarget t; unsigned int split;
+        for(split=1;split<22;split++) {
+            Vision_Init();send_bytes(v4_examples[0],split);Vision_GetTarget(&t);REQUIRE(!t.has_frame);
+            send_bytes(v4_examples[0]+split,22-split);Vision_GetTarget(&t);REQUIRE(t.accepted==1);
+        }
+        /* Bad CRC, truncated and wrong-length candidates recover, including mixed versions. */
+        memcpy(v,v4_examples[0],22);v[20]^=1;send_bytes(v,22);
+        send_bytes(v4_examples[0],9);send_bytes(v4_examples[1],22);
+        Vision_GetTarget(&t);REQUIRE(t.valid && t.fallback && t.sequence==2 && t.crc_errors>=1);
+        memcpy(v,v4_examples[0],22);v[3]=14;send_bytes(v,22);
+        feed_target(7,-500,4500,1);send_bytes(v4_examples[0],22);
+        Vision_GetTarget(&t);REQUIRE(t.version==4 && t.sequence==1 && t.valid);
+        /* Embedded AA55 in signed coordinates is data, not a new frame. */
+        memcpy(v,v4_examples[0],22);v[12]=0xAA;v[13]=0x55;send_v4(v);
+        Vision_GetTarget(&t);REQUIRE(t.endpoint_x_centi_cm==21930 && t.duplicate_frames>=1);
+        now_ms=299;Vision_GetTarget(&t);REQUIRE(t.endpoint_valid);
+        now_ms=300;Vision_GetTarget(&t);
+        REQUIRE(!t.valid && !t.link_alive && !t.endpoint_valid && !t.curvature_valid && !t.mode);
+        REQUIRE(!t.endpoint_x_centi_cm && t.endpoint_abs_curvature_cm_inv==0);
+        send_bytes(v4_examples[0],22);Vision_UartError();Vision_GetTarget(&t);
+        REQUIRE(!t.valid && !t.endpoint_valid && !t.curvature_valid && !t.mode && t.uart_errors==1);
+        Vision_GetControlTarget(&t);REQUIRE(!t.valid && !t.endpoint_valid);
     }
     finish(0);
 }

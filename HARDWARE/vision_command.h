@@ -3,6 +3,11 @@
 #include <stdint.h>
 
 #define VISION_FRAME_SIZE 14U
+#define VISION_ROUTE_FRAME_SIZE 22U
+#define VISION_TARGET_VALID 0x01U
+#define VISION_ENDPOINT_VALID 0x02U
+#define VISION_CURVATURE_VALID 0x04U
+#define VISION_TARGET_FALLBACK 0x08U
 #define VISION_RUN  0x01U
 #define VISION_LINE 0x02U
 #define VISION_STOP 0x04U
@@ -19,7 +24,7 @@ typedef struct {
     uint8_t flags, valid;
 } VisionCommand;
 
-/* V3: signed wire units are 0.01 cm (multiply by 0.0001 for metres).
+/* V3/V4: signed wire units are 0.01 cm (multiply by 0.0001 for metres).
  * X right-positive, Y forward-positive; no calibration offset is applied. */
 #define VISION_TARGET_TIMEOUT_MS 300U
 #define VISION_TARGET_HOLD_MS 1000U
@@ -29,11 +34,18 @@ typedef struct {
     uint16_t sequence;
     int16_t x_centi_cm, y_centi_cm;
     uint8_t has_frame, link_alive, valid;
+    /* V4 metadata; zero for V3. Curvature is absolute, in cm^-1 (x100 for m^-1).
+     * Use endpoint_valid/curvature_valid: zero curvature can be a valid straight. */
+    uint8_t version, flags, mode, fallback, endpoint_valid, curvature_valid;
+    int16_t endpoint_x_centi_cm, endpoint_y_centi_cm;
+    float endpoint_abs_curvature_cm_inv;
 } VisionTarget;
 
 /* Atomic snapshot; also expires stale targets. Invalid/expired coordinates zero. */
 void Vision_GetTarget(VisionTarget *out);
-/* Last valid V3 target, usable for <1000ms; invalid frames do not refresh it. */
+/* Last valid V3/V4 target, usable for <1000ms; invalid frames do not refresh it.
+ * Metadata here belongs to that held frame, not the latest route. Use
+ * Vision_GetTarget for fresh mode/endpoint telemetry, even with invalid target. */
 void Vision_GetControlTarget(VisionTarget *out);
 void Vision_Init(void);
 void Vision_ProcessByte(uint8_t byte);

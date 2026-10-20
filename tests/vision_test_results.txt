@@ -12,4 +12,4 @@
 
 tests/test_vision.c: 2 warnings, 0 errors
 
-PASS: vision; 116 assertions; case 25/25; failure line 0; signature 0xacce5501
+PASS: vision; 200 assertions; case 28/28; failure line 0; signature 0xacce5501
