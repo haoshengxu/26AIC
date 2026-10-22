@@ -301,7 +301,7 @@ void test_entry(void)
         REQUIRE(s_status==MODE_STATUS_LINK_ERROR && MOTOR_A.Target==0);
         start_m3();feed_target(2,500,4500,1);advance(10);
         REQUIRE(ModeControl_DebugCommand("TV",0.8f));advance(10);
-        REQUIRE(MOTOR_A.Target<=0.8f && MOTOR_B.Target<=0.8f);
+        REQUIRE(MOTOR_A.Target<=ACK_MAX_WHEEL_SPEED_MPS && MOTOR_B.Target<=ACK_MAX_WHEEL_SPEED_MPS);
         REQUIRE(!ModeControl_DebugCommand("TKP",2));
         REQUIRE(ModeControl_DebugCommand("RUN",0));advance(10);
         REQUIRE(s_status==MODE_STATUS_STOPPED && Servo==SERVO_INIT);
@@ -340,11 +340,11 @@ void test_entry(void)
         TrackingParameters p; TrackingOutput out;
         float saved, left_speed;
         Tracking_GetParameters(&p);
-        REQUIRE(p.speed_mps==0.45f && p.turn_speed_gain==0.020f && p.turn_min_speed_mps==0.30f && p.turn_x_threshold_cm==5);
-        REQUIRE(NEAR(Tracking_TurnSpeed(0.05f,&p),0.45f));
-        REQUIRE(NEAR(Tracking_TurnSpeed(0.07f,&p),0.41f));
-        REQUIRE(NEAR(Tracking_TurnSpeed(0.09f,&p),0.37f));
-        REQUIRE(NEAR(Tracking_TurnSpeed(-0.50f,&p),0.30f));
+        REQUIRE(p.speed_mps==0.90f && p.turn_speed_gain==0.040f && p.turn_min_speed_mps==0.60f && p.turn_x_threshold_cm==5);
+        REQUIRE(NEAR(Tracking_TurnSpeed(0.05f,&p),0.90f));
+        REQUIRE(NEAR(Tracking_TurnSpeed(0.07f,&p),0.82f));
+        REQUIRE(NEAR(Tracking_TurnSpeed(0.09f,&p),0.74f));
+        REQUIRE(NEAR(Tracking_TurnSpeed(-0.50f,&p),0.60f));
         /* Exercise runtime settings independently of compiled defaults. */
         REQUIRE(ModeControl_DebugCommand("TV",0.25f));
         REQUIRE(ModeControl_DebugCommand("TXK",0.01f));
@@ -374,12 +374,12 @@ void test_entry(void)
         REQUIRE(ModeControl_DebugCommand("TXK",1));
         Tracking_GetParameters(&p);REQUIRE(NEAR(Tracking_TurnSpeed(3,&p),0.25f));
         REQUIRE(!ModeControl_DebugCommand("TXK",-1) && !ModeControl_DebugCommand("TXTH",-1));
-        REQUIRE(!ModeControl_DebugCommand("TVMIN",0) && !ModeControl_DebugCommand("TVMIN",0.81f));
+        REQUIRE(!ModeControl_DebugCommand("TVMIN",0) && !ModeControl_DebugCommand("TVMIN",1.61f));
         REQUIRE(ModeControl_DebugCommand("TRESET",1));
         Tracking_GetParameters(&p);REQUIRE(p.turn_speed_gain==TRACK_TURN_SPEED_GAIN && p.turn_x_threshold_cm==TRACK_TURN_X_THRESHOLD_CM);
         /* M4 wheel targets do not use M3 turn slowdown. */
         REQUIRE(ModeControl_DebugCommand("M",4));REQUIRE(ModeControl_DebugCommand("RUN",1));
-        advance(10);REQUIRE(NEAR(MOTOR_A.Target,0.3f) && NEAR(MOTOR_B.Target,0.3f));
+        advance(10);REQUIRE(NEAR(MOTOR_A.Target,ACK_DEBUG_DEFAULT_SPEED_MPS) && NEAR(MOTOR_B.Target,ACK_DEBUG_DEFAULT_SPEED_MPS));
     }
     case_id=26;reset();
     {
@@ -469,6 +469,55 @@ void test_entry(void)
         send_bytes(v4_examples[0],22);Vision_UartError();Vision_GetTarget(&t);
         REQUIRE(!t.valid && !t.endpoint_valid && !t.curvature_valid && !t.mode && t.uart_errors==1);
         Vision_GetControlTarget(&t);REQUIRE(!t.valid && !t.endpoint_valid);
+    }
+    case_id=29;reset();
+    {
+        static const uint8_t examples[5][25] = {
+            {0xAA,0x55,5,25,1,0,7,1,0xF4,1,0x94,0x11,0xE8,3,0x64,0x19,0x0A,0xD7,0xA3,0x3C,1,0xF4,0x10,0x29,0x79},
+            {0xAA,0x55,5,25,2,0,7,1,0xF4,1,0x94,0x11,0xE8,3,0x64,0x19,0x0A,0xD7,0xA3,0x3C,0,0,0,0x2D,0xF1},
+            {0xAA,0x55,5,25,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0x9A,0x13,0xD5,0x84},
+            {0xAA,0x55,5,25,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0x88,0x5C},
+            {0xAA,0x55,5,25,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0xA7,0xB5}
+        };
+        VisionTarget t, held; uint8_t v[25]; uint16_t crc; unsigned int j;
+        for(j=1;j<25;j++) {
+            Vision_Init();send_bytes(examples[0],j);Vision_GetTarget(&t);REQUIRE(!t.has_frame);
+            send_bytes(examples[0]+j,25-j);Vision_GetTarget(&t);
+            REQUIRE(t.version==5 && t.valid && t.tape_detected && t.tape_distance_y_centi_cm==4340);
+            REQUIRE(t.endpoint_valid && t.curvature_valid && NEAR(t.endpoint_abs_curvature_cm_inv,0.02f));
+        }
+        Vision_GetControlTarget(&held);REQUIRE(held.valid && !held.tape_detected);
+        send_bytes(examples[1],25);Vision_GetTarget(&t);REQUIRE(t.valid && !t.tape_detected && !t.tape_distance_y_centi_cm);
+        now_ms=100;send_bytes(examples[2],25);Vision_GetTarget(&t);Vision_GetControlTarget(&held);
+        REQUIRE(!t.valid && t.link_alive && t.tape_detected && t.tape_distance_y_centi_cm==5018);
+        REQUIRE(held.valid && held.received_ms==0 && !held.tape_detected);
+        send_bytes(examples[3],25);Vision_GetTarget(&t);REQUIRE(!t.valid && !t.tape_detected);
+        send_bytes(examples[4],25);Vision_GetTarget(&t);REQUIRE(t.tape_detected && t.tape_distance_y_centi_cm==0);
+        memcpy(v,examples[2],25);v[21]=v[22]=0xFF;
+        crc=Vision_Crc16(v,23);v[23]=(uint8_t)crc;v[24]=(uint8_t)(crc>>8);
+        send_bytes(v,25);Vision_GetTarget(&t);REQUIRE(t.tape_distance_y_centi_cm==65535U);
+        now_ms=399;Vision_GetTarget(&t);REQUIRE(t.tape_detected);
+        now_ms=400;Vision_GetTarget(&t);REQUIRE(!t.link_alive && !t.tape_detected && !t.tape_distance_y_centi_cm);
+        send_bytes(examples[0],25);send_bytes(v4_examples[0],22);Vision_GetTarget(&t);REQUIRE(t.version==4 && !t.tape_detected);
+        send_bytes(examples[0],25);feed_target(10,0,4500,1);Vision_GetTarget(&t);REQUIRE(t.version==3 && !t.tape_detected);
+        send_bytes(examples[0],25);Vision_UartError();Vision_GetTarget(&t);REQUIRE(!t.tape_detected && !t.tape_distance_y_centi_cm);
+        for(j=0;j<6;j++) {
+            Vision_Init();memcpy(v,examples[2],25);
+            if(j==0)v[20]=2;
+            if(j==1)v[20]=0;
+            if(j==2)v[8]=1;
+            if(j==3)v[12]=1;
+            if(j==4)v[16]=1;
+            if(j==5){v[6]=4;v[7]=1;}
+            crc=Vision_Crc16(v,23);v[23]=(uint8_t)crc;v[24]=(uint8_t)(crc>>8);
+            send_bytes(v,25);Vision_GetTarget(&t);REQUIRE(!t.has_frame && t.format_errors==1);
+        }
+        memcpy(v,examples[0],25);v[23]^=1;send_bytes(v,25);
+        send_bytes(examples[0],12);send_bytes(examples[2],25);
+        Vision_GetTarget(&t);REQUIRE(t.sequence==3 && t.tape_detected && t.crc_errors>=1);
+        now_ms=0xFFFFFFF0U;send_bytes(examples[2],25);now_ms=284U;Vision_GetTarget(&t);REQUIRE(!t.tape_detected && !t.link_alive);
+        start_m3();send_bytes(examples[2],25);advance(10);REQUIRE(s_status==MODE_STATUS_WAIT_COMMAND);
+        send_bytes(examples[0],25);advance(10);REQUIRE(s_status==MODE_STATUS_RUNNING);
     }
     finish(0);
 }

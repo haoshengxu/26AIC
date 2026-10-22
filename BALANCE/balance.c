@@ -17,6 +17,17 @@ void Drive_Motor(float speed_mps, float unused_vy, float steer_rad)
     Servo = Ack_ServoPulse(steer_rad);
 }
 
+void SpeedPI_ResetWheel(uint8_t right)
+{
+    if (right) {
+        Ack_SpeedReset(&s_right_pi);
+        MOTOR_B.Motor_Pwm = 0.0f;
+    } else {
+        Ack_SpeedReset(&s_left_pi);
+        MOTOR_A.Motor_Pwm = 0.0f;
+    }
+}
+
 void SpeedPI_Reset(void)
 {
     Ack_SpeedReset(&s_left_pi);
@@ -27,13 +38,22 @@ void SpeedPI_Reset(void)
     MOTOR_D.Motor_Pwm = 0.0f;
 }
 
-int Incremental_PI_A(float encoder, float target)
+void SpeedPI_GetState(AckSpeedPI *left, AckSpeedPI *right)
+{
+    uint32_t mask = __get_PRIMASK();
+    __disable_irq();
+    *left = s_left_pi;
+    *right = s_right_pi;
+    __set_PRIMASK(mask);
+}
+
+int Speed_PI_A(float encoder, float target)
 {
     return (int)Ack_SpeedUpdate(&s_left_pi, target, encoder,
                                 MOTOR_A.Velocity_KP, MOTOR_A.Velocity_KI);
 }
 
-int Incremental_PI_B(float encoder, float target)
+int Speed_PI_B(float encoder, float target)
 {
     return (int)Ack_SpeedUpdate(&s_right_pi, target, encoder,
                                 MOTOR_B.Velocity_KP, MOTOR_B.Velocity_KI);
@@ -45,8 +65,8 @@ void Balance_TimerCallback(TIM_HandleTypeDef *htim)
     Get_Velocity_Form_Encoder();
     ModeControl_Tick10ms();
     if (ModeControl_GetStatus() == MODE_STATUS_RUNNING && !Turn_Off(Voltage)) {
-        MOTOR_A.Motor_Pwm = Incremental_PI_A(MOTOR_A.Encoder, MOTOR_A.Target);
-        MOTOR_B.Motor_Pwm = Incremental_PI_B(MOTOR_B.Encoder, MOTOR_B.Target);
+        MOTOR_A.Motor_Pwm = Speed_PI_A(MOTOR_A.Encoder, MOTOR_A.Target);
+        MOTOR_B.Motor_Pwm = Speed_PI_B(MOTOR_B.Encoder, MOTOR_B.Target);
         Set_Pwm(ACK_MOTOR_A_SIGN * (int)MOTOR_A.Motor_Pwm,
                 ACK_MOTOR_B_SIGN * (int)MOTOR_B.Motor_Pwm, 0, 0, Servo);
     } else {

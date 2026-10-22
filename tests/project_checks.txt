@@ -12,6 +12,8 @@ PASS: CubeMX servo period synchronized
 PASS: All Keil source files exist
 PASS: Control module in Keil build
 PASS: UART priority above TIM7
+PASS: TIM2 x4 encoder agrees with software and CubeMX
+PASS: TIM3 x4 encoder agrees with software and CubeMX
 PASS: CubeMX CMSIS V2 and user code preservation enabled
 PASS: Generated task configuration matches IOC
 PASS: Task business logic survives regeneration

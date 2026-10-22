@@ -120,7 +120,7 @@ void test_entry(void)
     REQUIRE(Ack_ServoPulse(100.0f) >= ACK_SERVO_MIN_US);
     REQUIRE(Ack_ServoPulse(-100.0f) <= ACK_SERVO_MAX_US);
 
-    case_id = 2; /* Separate incremental PI state, saturation and reset. */
+    case_id = 2; /* Separate positional PI state, saturation and reset. */
     Ack_SpeedReset(&pi_a); Ack_SpeedReset(&pi_b);
     result = Ack_SpeedUpdate(&pi_a, 0.3f, 0.0f, 1500.0f, 500.0f);
     REQUIRE(NEAR(result, 600.0f, 0.01f));
@@ -128,9 +128,12 @@ void test_entry(void)
     REQUIRE(NEAR(Ack_SpeedUpdate(&pi_b, 0.3f, 0.2f, 1500.0f, 500.0f), 200.0f, 0.01f));
     for (i = 0; i < 500; ++i) Ack_SpeedUpdate(&pi_a, 10.0f, 0.0f, 1500.0f, 500.0f);
     REQUIRE(pi_a.output == ACK_MOTOR_PWM_LIMIT);
+    REQUIRE(pi_a.p_output==15000 && pi_a.i_output==5750);
+    REQUIRE(pi_a.integral==ACK_SPEED_INTEGRAL_LIMIT);
     REQUIRE(Ack_SpeedUpdate(&pi_a, 0.0f, 1.0f, 1500.0f, 500.0f) < ACK_MOTOR_PWM_LIMIT);
     Ack_SpeedReset(&pi_a);
     REQUIRE(pi_a.output == 0.0f && pi_a.last_error == 0.0f);
+    REQUIRE(pi_a.p_output==0 && pi_a.i_output==0 && pi_a.integral==0);
 
     case_id = 3; /* Wrapped position PID and anti-windup. */
     REQUIRE(NEAR(Ack_AngleError(-179.0f, 179.0f), 2.0f, 0.00001f));
@@ -241,6 +244,8 @@ void test_entry(void)
     ModeControl_DebugCommand("M", 4.0f);
     ModeControl_DebugCommand("V", 0.3f);
     ModeControl_DebugCommand("RUN", 1.0f);
+    MOTOR_A.Velocity_KP=MOTOR_B.Velocity_KP=1500;
+    MOTOR_A.Velocity_KI=MOTOR_B.Velocity_KI=500;
     left_count = 10; right_count = -5; advance(10);
     REQUIRE(MOTOR_A.Encoder > MOTOR_B.Encoder && MOTOR_B.Encoder > 0.0f);
     REQUIRE(MOTOR_A.Motor_Pwm != MOTOR_B.Motor_Pwm);
@@ -283,11 +288,33 @@ void test_entry(void)
     REQUIRE(ModeControl_DebugCommand("M",4.0f));
     REQUIRE(ModeControl_DebugCommand("L",0.8f));
     REQUIRE(ModeControl_DebugCommand("R",-0.8f));
-    REQUIRE(!ModeControl_DebugCommand("V",0.801f));
-    REQUIRE(!ModeControl_DebugCommand("L",-0.801f));
+    REQUIRE(!ModeControl_DebugCommand("V",1.601f));
+    REQUIRE(!ModeControl_DebugCommand("L",-1.601f));
     REQUIRE(ModeControl_DebugCommand("RUN",1.0f));
     advance(10);
     REQUIRE(MOTOR_A.Target == 0.8f && MOTOR_B.Target == -0.8f);
     double_click(); REQUIRE(s_mode == MODE_CONTROL_STRAIGHT_5S && !ModeControl_IsActive());
+    case_id=14; /* Positional terms and DIANSAI post-calculation integral bound. */
+    Ack_SpeedReset(&pi_a);
+    REQUIRE(NEAR(Ack_SpeedUpdate(&pi_a,0.2f,0,1000,100),220,0.001f));
+    REQUIRE(NEAR(pi_a.p_output,200,0.001f) && NEAR(pi_a.i_output,20,0.001f));
+    REQUIRE(NEAR(Ack_SpeedUpdate(&pi_a,0.2f,0.1f,1000,100),130,0.001f));
+    REQUIRE(NEAR(pi_a.p_output,100,0.001f) && NEAR(pi_a.i_output,30,0.001f));
+    REQUIRE(NEAR(Ack_SpeedUpdate(&pi_a,0,0.1f,1000,100),-80,0.001f));
+    Ack_SpeedReset(&pi_a);
+    for(i=0;i<30;i++) Ack_SpeedUpdate(&pi_a,0.2f,0,1000,100);
+    REQUIRE(pi_a.integral==1.5f && NEAR(pi_a.i_output,170,0.001f));
+    REQUIRE(NEAR(pi_a.output,370,0.001f));
+    /* Ki=0 contributes no I output, even with stored integral. */
+    REQUIRE(NEAR(Ack_SpeedUpdate(&pi_a,0,0.02f,3000,0),-60,0.001f));
+    REQUIRE(pi_a.i_output==0);
+    REQUIRE(Ack_SpeedUpdate(&pi_a,0,0,3000,0)==0);
+    Ack_SpeedReset(&pi_a);
+    REQUIRE(Ack_SpeedUpdate(&pi_a,0,-10,10000,10000)==ACK_MOTOR_PWM_LIMIT);
+    REQUIRE(pi_a.integral==1.5f);
+    REQUIRE(Ack_SpeedUpdate(&pi_a,0,10,10000,10000)==-ACK_MOTOR_PWM_LIMIT);
+    REQUIRE(pi_a.integral==-1.5f);
+    Ack_SpeedReset(&pi_a);
+    REQUIRE(pi_a.integral==0 && pi_a.p_output==0 && pi_a.i_output==0);
     finish(0U);
 }

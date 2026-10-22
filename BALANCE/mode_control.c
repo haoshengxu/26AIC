@@ -248,7 +248,12 @@ void ModeControl_Tick10ms(void)
                 StopTask(MODE_STATUS_LINK_ERROR);
             return;
         }
-        if (!target.valid || !target.link_alive) {
+        if ((!target.valid || !target.link_alive) &&
+            s_tracking.tape_state != TAPE_WAIT && s_tracking.tape_state != TAPE_FAULT &&
+            s_tracking.tape_state != TAPE_RECOVER && s_tracking.tape_state != TAPE_FINISH &&
+            !(latest_route.version == 5U && latest_route.link_alive && latest_route.tape_detected &&
+              s_tracking.tape_state != TAPE_PASS &&
+              (uint32_t)(now-latest_route.received_ms)<TRACK_TAPE_GAP_MAX_MS)) {
             StopTask(MODE_STATUS_LINK_ERROR);
             StartBuzzer(ERROR_BEEP_MS);
             return;
@@ -261,7 +266,7 @@ void ModeControl_Tick10ms(void)
         }
         s_status = MODE_STATUS_RUNNING;
         /* Drive_Motor -> Ack_Kinematics + Ack_ServoPulse; balance.c keeps
-         * the original incremental wheel-speed PI and PWM protection. */
+         * the positional wheel-speed PI and PWM protection. */
         Drive_Motor(s_tracking_output.speed_mps, 0.0f, s_tracking_output.steer_left_rad);
         return;
     }
@@ -316,7 +321,7 @@ float ModeControl_DebugAngle(void) { return s_debug_angle; }
 uint8_t ModeControl_DebugCommand(const char *key, float value)
 {
     if (!strcmp(key,"TRESET")) {
-        if (value != 1.0f) return 0;
+        if (value != 1.0f || (ModeControl_IsActive() && s_tracking.tape_state >= TAPE_APPROACH)) return 0;
         Tracking_DefaultParameters();
         Tracking_Reset(&s_tracking, &s_tracking_output);
         return 1;
@@ -341,6 +346,19 @@ uint8_t ModeControl_DebugCommand(const char *key, float value)
         if (value != 1.0f || (s_mode != MODE_CONTROL_DEBUG && s_mode != MODE_CONTROL_VISION_LINE)) return 0;
         if (!ModeControl_IsActive()) StartTask();
         return ModeControl_IsActive();
+    }
+    /* Wheel PI tuning is restricted to bench mode; gains remain active in all modes. */
+    if (!strcmp(key,"LKP") || !strcmp(key,"LKI") ||
+        !strcmp(key,"RKP") || !strcmp(key,"RKI")) {
+        float max_gain = key[2]=='P' ? ACK_SPEED_KP_MAX : ACK_SPEED_KI_MAX;
+        if (s_mode != MODE_CONTROL_DEBUG || !(value >= 0.0f && value <= max_gain)) return 0;
+        if (!strcmp(key,"LKP")) MOTOR_A.Velocity_KP=value;
+        else if (!strcmp(key,"LKI")) MOTOR_A.Velocity_KI=value;
+        else if (!strcmp(key,"RKP")) MOTOR_B.Velocity_KP=value;
+        else MOTOR_B.Velocity_KI=value;
+        /* Match DIANSAI tuning: clear this loop's stored integral after a gain change. */
+        SpeedPI_ResetWheel(key[0]=='R');
+        return 1;
     }
     if (!strcmp(key, "A")) {
         if (!(value >= ACK_DEBUG_MIN_ANGLE_DEG && value <= ACK_DEBUG_MAX_ANGLE_DEG)) return 0;

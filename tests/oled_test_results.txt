@@ -1,15 +1,8 @@
 "tests/shims/stm32f4xx_hal.h", line 14: Warning:  #2687-D: declaration hides built-in function "__disable_irq"
-
   static __inline void __disable_irq(void) { irq_mask=1; }
-
                        ^
-
 "tests/test_oled.c", line 14: Warning:  #550-D: variable "gpio_pins"  was set but never used
-
   static uint32_t gpio_pins[16];
-
                   ^
-
 tests/test_oled.c: 2 warnings, 0 errors
-
 PASS: oled; 43 assertions; case 3/3; failure line 0; signature 0xacce5501

@@ -5,6 +5,7 @@
 void Balance_TimerCallback(TIM_HandleTypeDef *htim);
 #include "system.h"
 #include "ackermann_config.h"
+#include "ackermann_control.h"
 
 #define PWMA1 TIM10->CCR1
 #define PWMA2 TIM11->CCR1
@@ -21,8 +22,12 @@ void Balance_TimerCallback(TIM_HandleTypeDef *htim);
 void Set_Pwm(int motor_a, int motor_b, int motor_c, int motor_d, int servo);
 void Drive_Motor(float speed_mps, float unused_vy, float steer_rad);
 void SpeedPI_Reset(void);
-int Incremental_PI_A(float encoder, float target);
-int Incremental_PI_B(float encoder, float target);
+/* Caller serializes with the control ISR. right=0 left, right=1 right. */
+void SpeedPI_ResetWheel(uint8_t right);
+/* Coherent snapshot of both latest 100 Hz PI calculations. */
+void SpeedPI_GetState(AckSpeedPI *left, AckSpeedPI *right);
+int Speed_PI_A(float encoder, float target);
+int Speed_PI_B(float encoder, float target);
 void Get_Velocity_Form_Encoder(void);
 u8 Turn_Off(float voltage);
 float target_limit_float(float value, float low, float high);

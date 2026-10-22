@@ -16,7 +16,8 @@ static TrackingParameters parameters = {TRACK_BASE_SPEED_MPS, TRACK_KP,
     TRACK_SINGLE_SPEED_MPS, TRACK_FALLBACK_SPEED_MPS, TRACK_UNKNOWN_SPEED_MPS,
     TRACK_HOLD_SPEED_MPS, TRACK_SAT_SPEED_MPS, TRACK_ACCEL_MPS2, TRACK_DECEL_MPS2,
     TRACK_PP_STRAIGHT_GAIN, TRACK_GAIN_CURVE_ENTER, TRACK_GAIN_CURVE_EXIT,
-    TRACK_START_ACCEL_MPS2};
+    TRACK_START_ACCEL_MPS2, TRACK_TAPE_DECEL_MPS2, TRACK_TAPE_GAP_CM, TRACK_TAPE_WAIT_S,
+    10.0f, TRACK_TAPE_RECOVER_SPEED, TRACK_TAPE_RECOVER_MS*0.001f};
 
 void Tracking_DefaultParameters(void)
 {
@@ -42,6 +43,12 @@ void Tracking_DefaultParameters(void)
     parameters.accel_mps2 = TRACK_ACCEL_MPS2;
     parameters.start_accel_mps2 = TRACK_START_ACCEL_MPS2;
     parameters.decel_mps2 = TRACK_DECEL_MPS2;
+    parameters.tape_decel_mps2 = TRACK_TAPE_DECEL_MPS2;
+    parameters.tape_gap_cm = TRACK_TAPE_GAP_CM;
+    parameters.tape_wait_s = TRACK_TAPE_WAIT_S;
+    parameters.tape_recover_angle_deg=10.0f;
+    parameters.tape_recover_speed_mps=TRACK_TAPE_RECOVER_SPEED;
+    parameters.tape_recover_time_s=TRACK_TAPE_RECOVER_MS*0.001f;
 }
 
 void Tracking_GetParameters(TrackingParameters *out)
@@ -54,7 +61,19 @@ void Tracking_GetParameters(TrackingParameters *out)
 
 uint8_t Tracking_SetParameter(const char *key, float value)
 {
-    if (!strcmp(key,"TV") && value >= 0.01f && value <= ACK_MAX_WHEEL_SPEED_MPS)
+    if (!strcmp(key,"TBA") && value >= -20.0f && value <= 20.0f)
+        parameters.tape_recover_angle_deg=value;
+    else if (!strcmp(key,"TBV") && value >= 0.05f && value <= ACK_MAX_WHEEL_SPEED_MPS)
+        parameters.tape_recover_speed_mps=value;
+    else if (!strcmp(key,"TBT") && value >= 0.1f && value <= 5.0f)
+        parameters.tape_recover_time_s=value;
+    else if (!strcmp(key,"TTDEC") && value >= 0.05f && value <= 2.0f)
+        parameters.tape_decel_mps2 = value;
+    else if (!strcmp(key,"TTDIST") && value >= 2.0f && value <= 100.0f)
+        parameters.tape_gap_cm = value;
+    else if (!strcmp(key,"TTWAIT") && value >= 0.5f && value <= 30.0f)
+        parameters.tape_wait_s = value;
+    else if (!strcmp(key,"TV") && value >= 0.01f && value <= ACK_MAX_WHEEL_SPEED_MPS)
         parameters.speed_mps = value;
     else if (!strcmp(key,"TXTH") && value >= 0.0f && value <= 327.68f)
         parameters.turn_x_threshold_cm = value;
@@ -117,6 +136,120 @@ static uint8_t Tracking_Finite(float value)
     return value == value && value <= FLT_MAX && value >= -FLT_MAX;
 }
 
+/* Confirm repeated fresh detections, then retain the stop through brief losses. */
+static void TapeLimit(TrackingController *c, const VisionTarget *v, uint32_t now,
+                      float measured, const TrackingParameters *p, TrackingOutput *o)
+{
+    uint8_t fresh=v->version==5U && v->link_alive &&
+        (uint32_t)(now-v->received_ms)<TRACK_TAPE_GAP_MAX_MS;
+    uint8_t seen=fresh && v->tape_detected;
+    float remaining, a, delay, speed;
+    if(c->tape_state==TAPE_PASS) {
+        if(Tracking_Finite(measured))
+            c->tape_resume_travel_m+=fmaxf(measured,0.0f)*ACK_CONTROL_DT_S;
+        if(fresh && !v->tape_detected) {
+            if(!c->tape_clear_started){c->tape_clear_started=1;c->tape_clear_ms=now;}
+            if((uint32_t)(now-c->tape_clear_ms)>=500U && c->tape_resume_travel_m>=0.50f)
+                c->tape_state=TAPE_SEARCH;
+        } else c->tape_clear_started=0;
+    } else if(c->tape_state==TAPE_SEARCH || c->tape_state==TAPE_CONFIRM) {
+        if(!seen) { c->tape_state=TAPE_SEARCH;c->tape_seen_count=0; }
+        else {
+            if(c->tape_state==TAPE_SEARCH) {
+                c->tape_state=TAPE_CONFIRM;c->tape_first_ms=v->received_ms;
+                c->tape_last_ms=v->received_ms;c->tape_seen_count=1;
+            } else if(v->received_ms!=c->tape_last_ms) {
+                c->tape_last_ms=v->received_ms;++c->tape_seen_count;
+            }
+            c->tape_distance_m=v->tape_distance_y_centi_cm*0.0001f;
+            if(c->tape_seen_count>=3U &&
+               (uint32_t)(v->received_ms-c->tape_first_ms)>=TRACK_TAPE_CONFIRM_MS)
+            {
+                if(c->tape_count<4U) ++c->tape_count;
+                c->tape_state=c->tape_count>=4U ? TAPE_FINISH : TAPE_APPROACH;
+            }
+        }
+    } else if(c->tape_state==TAPE_APPROACH || c->tape_state==TAPE_BRAKE) {
+        /* After confirmation, odometry also bridges loss in the camera near blind zone.
+         * Fresh tape measurements may only bring the latched stop closer. */
+        if(Tracking_Finite(measured))
+            c->tape_distance_m=fmaxf(0,c->tape_distance_m-fmaxf(measured,0)*ACK_CONTROL_DT_S);
+        if(seen && v->received_ms!=c->tape_last_ms) {
+            c->tape_last_ms=v->received_ms;
+            c->tape_distance_m=fminf(c->tape_distance_m,v->tape_distance_y_centi_cm*0.0001f);
+        }
+    }
+    if(c->tape_state==TAPE_APPROACH || c->tape_state==TAPE_BRAKE) {
+        remaining=c->tape_distance_m-TRACK_REAR_TO_FRONT_M-p->tape_gap_cm*0.01f;
+        a=p->tape_decel_mps2;delay=TRACK_TAPE_DELAY_S;
+        /* Solve v*delay + v*v/(2*a) <= remaining. */
+        o->tape_speed_limit=sqrtf(a*a*delay*delay+2*a*fmaxf(remaining,0))-a*delay;
+        speed=fmaxf(c->route_speed_mps,fmaxf(measured,0));
+        c->tape_state=remaining<=speed*delay+speed*speed/(2*a) ? TAPE_BRAKE : TAPE_APPROACH;
+        if(remaining<=TRACK_TAPE_STOP_TOLERANCE_M) {
+            c->tape_state=TAPE_WAIT;c->tape_dwell_started=0;c->route_speed_mps=0;
+        }
+    }
+    o->tape_front_cm=(c->tape_distance_m-TRACK_REAR_TO_FRONT_M)*100.0f;
+    o->tape_state=c->tape_state;
+    o->tape_count=c->tape_count;
+}
+
+static uint8_t TapeWait(TrackingController *c,const VisionTarget *v,uint32_t now,
+                       float measured,const TrackingParameters *p,TrackingOutput *o)
+{
+    if(c->tape_state!=TAPE_WAIT && c->tape_state!=TAPE_FAULT && c->tape_state!=TAPE_FINISH) return 0;
+    o->valid=1;o->tape_state=c->tape_state;
+    o->tape_front_cm=(c->tape_distance_m-TRACK_REAR_TO_FRONT_M)*100.0f;
+    c->route_speed_mps=0;
+    if(c->tape_state==TAPE_FAULT || c->tape_state==TAPE_FINISH) return 1;
+    if(!Tracking_Finite(measured) || fabsf(measured)>0.02f) c->tape_dwell_started=0;
+    else if(!c->tape_dwell_started){c->tape_dwell_started=1;c->tape_stop_ms=now;}
+    o->tape_wait_remaining_s=c->tape_dwell_started ?
+        fmaxf(p->tape_wait_s-(uint32_t)(now-c->tape_stop_ms)*0.001f,0) : p->tape_wait_s;
+    if(c->tape_dwell_started && o->tape_wait_remaining_s<=0) {
+        c->tape_state=TAPE_RECOVER;c->tape_recover_ms=now;
+        c->tape_reliable_ms=v->received_ms;c->tape_reliable_count=0;
+        c->tape_resume_travel_m=0;c->tape_clear_started=0;
+        c->launch_complete=0;
+        return 0;
+    }
+    return 1;
+}
+
+/* Recovery eligibility only requires a valid, unexpired target.
+ * Three successive received frames reject isolated detections and cached targets. */
+static uint8_t TapeRecover(TrackingController *c, const VisionTarget *v,
+                          uint32_t now, const TrackingParameters *p, TrackingOutput *o)
+{
+    uint8_t reliable;
+    if(c->tape_state!=TAPE_RECOVER) return 0;
+    reliable=v->valid && (uint32_t)(now-v->received_ms)<TRACK_TAPE_GAP_MAX_MS;
+    if(!reliable) c->tape_reliable_count=0;
+    else if(v->received_ms!=c->tape_reliable_ms) {
+        if((uint32_t)(v->received_ms-c->tape_reliable_ms)>=TRACK_TAPE_GAP_MAX_MS)
+            c->tape_reliable_count=0;
+        ++c->tape_reliable_count;c->tape_reliable_ms=v->received_ms;
+    }
+    if(c->tape_reliable_count>=3U &&
+       (uint32_t)(now-c->tape_recover_ms)*0.001f<p->tape_recover_time_s) {
+        c->tape_state=TAPE_PASS;c->launch_complete=1;
+        return 0;
+    }
+    o->valid=1;
+    o->tape_recover_remaining_s=fmaxf(p->tape_recover_time_s-(uint32_t)(now-c->tape_recover_ms)*0.001f,0);
+    if((uint32_t)(now-c->tape_recover_ms)*0.001f>=p->tape_recover_time_s) {
+        c->tape_state=TAPE_FAULT;c->route_speed_mps=0;
+    } else {
+        o->speed_mps=o->requested_speed_mps=p->tape_recover_speed_mps;
+        o->steer_left_rad=o->raw_steer_left_rad=p->tape_recover_angle_deg*0.01745329252f;
+        o->correction_right_rad=-o->steer_left_rad;
+        c->route_speed_mps=o->speed_mps;
+    }
+    o->tape_state=c->tape_state;
+    return 1;
+}
+
 uint8_t Tracking_UpdateRoute(TrackingController *controller,
     const VisionTarget *control, const VisionTarget *latest, uint32_t now,
     float measured_speed, const TrackingParameters *p, TrackingOutput *out)
@@ -125,6 +258,9 @@ uint8_t Tracking_UpdateRoute(TrackingController *controller,
     uint8_t fresh, v4, curve_known;
     float gain;
     memset(out, 0, sizeof(*out));
+    TapeLimit(controller,latest,now,measured_speed,p,out);
+    if (TapeWait(controller,latest,now,measured_speed,p,out)) return 1U;
+    if (TapeRecover(controller,latest,now,p,out)) return 1U;
     if (!control->valid || !control->link_alive ||
         (uint32_t)(now-control->received_ms) >= VISION_TARGET_HOLD_MS ||
         !Tracking_Finite(measured_speed)) return 0U;
@@ -136,13 +272,13 @@ uint8_t Tracking_UpdateRoute(TrackingController *controller,
     fresh = latest->link_alive && latest->valid &&
         (uint32_t)(now-latest->received_ms) < TRACK_ROUTE_FRESH_MS &&
         (uint32_t)(now-control->received_ms) < TRACK_ROUTE_FRESH_MS;
-    v4 = control->version == 4U;
-    curve_known = v4 && latest->version == 4U && latest->link_alive &&
+    v4 = (control->version == 4U || control->version == 5U);
+    curve_known = v4 && (latest->version == 4U || latest->version == 5U) && latest->link_alive &&
         (uint32_t)(now-latest->received_ms) < TRACK_ROUTE_FRESH_MS &&
         latest->endpoint_valid && latest->endpoint_y_centi_cm > 0 && latest->curvature_valid;
     if (!controller->gain_initialized) {
-        controller->active_pp_gain = p->pp_gain;
-        controller->gain_curve = 1U; /* Unknown startup uses the calibrated curve gain. */
+        controller->active_pp_gain = p->pp_straight_gain;
+        controller->gain_curve = 0U; /* Curves require three new qualifying frames. */
         controller->gain_initialized = 1U;
     }
     gain = p->pp_gain;
@@ -152,15 +288,35 @@ uint8_t Tracking_UpdateRoute(TrackingController *controller,
         if (fresh && curve_known) {
             float road = fminf(latest->endpoint_abs_curvature_cm_inv,1.0f)*100.0f;
             /* Road curvature, not gain-scaled pursuit error: avoids feedback switching. */
-            if (road >= p->gain_curve_enter) controller->gain_curve = 1U;
-            else if (road <= p->gain_curve_exit) controller->gain_curve = 0U;
+            if (!controller->gain_frame_seen || latest->accepted!=controller->gain_last_accepted) {
+                if (controller->gain_frame_seen &&
+                    (uint32_t)(latest->accepted-controller->gain_last_accepted)!=1U)
+                    controller->gain_enter_count=0; /* Unobserved frames cannot confirm entry. */
+                controller->gain_frame_seen=1;
+                controller->gain_last_accepted=latest->accepted;
+                if (road >= p->gain_curve_enter) {
+                    if (controller->gain_enter_count<3U) ++controller->gain_enter_count;
+                    if (controller->gain_enter_count>=3U) controller->gain_curve=1U;
+                } else {
+                    controller->gain_enter_count=0;
+                    if (road <= p->gain_curve_exit) controller->gain_curve=0U;
+                }
+            }
             out->gain_state = controller->gain_curve;
             gain = controller->gain_curve ? p->pp_gain : p->pp_straight_gain;
             controller->active_pp_gain += Ack_Clamp(gain-controller->active_pp_gain,
                 -TRACK_GAIN_RATE_PER_S*ACK_CONTROL_DT_S, TRACK_GAIN_RATE_PER_S*ACK_CONTROL_DT_S);
         }
+        if (!fresh || !curve_known) {
+            controller->gain_enter_count=0;
+            controller->gain_last_accepted=latest->accepted;
+            controller->gain_frame_seen=1;
+        }
         gain = controller->active_pp_gain;
-    } else controller->active_pp_gain = gain;
+    } else {
+        controller->active_pp_gain = gain;
+        controller->gain_enter_count=0;controller->gain_frame_seen=0;
+    }
     if (!Ack_PurePursuitGain(x,y,gain,&out->steer_left_rad)) return 0U;
     out->active_pp_gain = gain;
     out->raw_steer_left_rad = atanf(ACK_WHEELBASE_M*gain*curvature);
@@ -229,6 +385,13 @@ uint8_t Tracking_UpdateRoute(TrackingController *controller,
             out->route_state = TRACK_ROUTE_HOLD;
         }
     }
+    if(controller->tape_state==TAPE_APPROACH || controller->tape_state==TAPE_BRAKE) {
+        /* Apply after ordinary ramps: TDEC and curve floors cannot weaken tape braking. */
+        out->requested_speed_mps=fminf(out->requested_speed_mps,out->tape_speed_limit);
+        out->speed_mps=fminf(out->speed_mps,out->tape_speed_limit);
+        controller->route_speed_mps=out->speed_mps;
+    }
+    out->tape_state=controller->tape_state;
     out->valid = 1U;
     return 1U;
 }

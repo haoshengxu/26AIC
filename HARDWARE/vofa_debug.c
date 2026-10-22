@@ -8,7 +8,7 @@
 #include <string.h>
 
 #define RX_SIZE 256U
-#define CHANNELS 67U
+#define CHANNELS 91U
 static uint8_t rx_byte;
 static volatile uint8_t rx_ring[RX_SIZE];
 static volatile unsigned int rx_head, rx_tail, rx_fault;
@@ -56,7 +56,7 @@ static uint8_t ParseDecimal(const char *p, float *result)
         digits++;
         if (fraction) { value += (*p - '0') * scale; scale *= 0.1f; }
         else value = value * 10.0f + (*p - '0');
-        if (value > 10000.0f) return 0;
+        if (value > 100000.0f) return 0;
         p++;
     }
     *result = sign * value;
@@ -85,6 +85,7 @@ void Vofa_Task(void)
     VisionTarget target, control_target;
     TrackingOutput output;
     TrackingParameters params;
+    AckSpeedPI left_pi, right_pi;
     unsigned int budget = RX_SIZE;
     uint32_t mask, now;
     uint8_t byte;
@@ -181,6 +182,33 @@ void Vofa_Task(void)
     frame.channels[47] = output.control_y_m*100.0f;
     frame.channels[65] = params.start_accel_mps2;
     frame.channels[66] = output.startup_active;
+    SpeedPI_GetState(&left_pi, &right_pi);
+    /* Positional PI: P/I are full contributions before output saturation.
+     * PWM is clamp(P + I), then truncated to the signed motor command. */
+    frame.channels[80] = MOTOR_A.Motor_Pwm;
+    frame.channels[81] = left_pi.p_output;
+    frame.channels[82] = left_pi.i_output;
+    frame.channels[83] = MOTOR_B.Motor_Pwm;
+    frame.channels[84] = right_pi.p_output;
+    frame.channels[85] = right_pi.i_output;
+    frame.channels[86] = params.tape_recover_angle_deg;
+    frame.channels[87] = params.tape_recover_speed_mps;
+    frame.channels[88] = params.tape_recover_time_s;
+    frame.channels[89] = output.tape_count;
+    frame.channels[90] = output.tape_recover_remaining_s;
+    frame.channels[76] = MOTOR_A.Velocity_KP;
+    frame.channels[77] = MOTOR_A.Velocity_KI;
+    frame.channels[78] = MOTOR_B.Velocity_KP;
+    frame.channels[79] = MOTOR_B.Velocity_KI;
+    frame.channels[67] = target.tape_detected;
+    frame.channels[68] = target.tape_distance_y_centi_cm*0.01f;
+    frame.channels[69] = output.tape_state;
+    frame.channels[70] = output.tape_front_cm;
+    frame.channels[71] = output.tape_speed_limit;
+    frame.channels[72] = params.tape_decel_mps2;
+    frame.channels[73] = params.tape_gap_cm;
+    frame.channels[74] = params.tape_wait_s;
+    frame.channels[75] = output.tape_wait_remaining_s;
     frame.channels[60] = params.pp_straight_gain;
     frame.channels[61] = params.gain_curve_enter;
     frame.channels[62] = params.gain_curve_exit;

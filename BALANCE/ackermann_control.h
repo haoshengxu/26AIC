@@ -3,7 +3,11 @@
 
 #include "ackermann_config.h"
 
-typedef struct { float output; float last_error; } AckSpeedPI;
+typedef struct {
+    float output, last_error, integral;
+    /* Positional outputs, in PWM counts; output = clamp(P + I). D = 0. */
+    float p_output, i_output;
+} AckSpeedPI;
 typedef struct {
     float integral;
     float last_error;

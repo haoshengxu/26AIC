@@ -33,6 +33,13 @@ def main():
     checks.append(("Control module in Keil build", any("ackermann_control.c" in path for path in paths)))
     checks.append(("UART priority above TIM7", "HAL_NVIC_SetPriority(USART2_IRQn, 1, 0);" in source("Core/Src/usart.c") and "HAL_NVIC_SetPriority(TIM7_IRQn, 2, 0);" in timer))
     ioc = source("Demo1.ioc")
+    for timer_id in (2, 3):
+        timer_block = timer[timer.index(f"void MX_TIM{timer_id}_Init"):timer.index(f"/* TIM{timer_id+1} init function */")]
+        checks.append((f"TIM{timer_id} x4 encoder agrees with software and CubeMX",
+            "sConfig.EncoderMode = TIM_ENCODERMODE_TI12;" in timer_block and
+            f"TIM{timer_id}.EncoderMode=TIM_ENCODERMODE_TI12" in ioc and
+            f"TIM{timer_id}.IPParameters=EncoderMode" in ioc and
+            bool(re.search(r"EncoderMultiples\s+4\b", (ROOT / "BALANCE/robot_select_init.h").read_text(encoding="ascii", errors="ignore")))))
     rtos = source("Core/Src/freertos.c")
     checks.append(("CubeMX CMSIS V2 and user code preservation enabled", "VP_FREERTOS_VS_CMSIS_V2.Mode=CMSIS_V2" in ioc and "ProjectManager.KeepUserCode=true" in ioc))
     checks.append(("Generated task configuration matches IOC", all(value in ioc for value in ("vofaTask,32,768,StartVofaTask", "displayTask,24,768,StartDisplayTask")) and all(value in rtos for value in ("vofaTaskBuffer[ 768 ]", "displayTaskBuffer[ 768 ]", "osPriorityAboveNormal", "osPriorityNormal"))))

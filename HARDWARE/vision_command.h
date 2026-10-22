@@ -4,6 +4,7 @@
 
 #define VISION_FRAME_SIZE 14U
 #define VISION_ROUTE_FRAME_SIZE 22U
+#define VISION_TAPE_FRAME_SIZE 25U
 #define VISION_TARGET_VALID 0x01U
 #define VISION_ENDPOINT_VALID 0x02U
 #define VISION_CURVATURE_VALID 0x04U
@@ -24,7 +25,7 @@ typedef struct {
     uint8_t flags, valid;
 } VisionCommand;
 
-/* V3/V4: signed wire units are 0.01 cm (multiply by 0.0001 for metres).
+/* V3/V4/V5: signed wire units are 0.01 cm (multiply by 0.0001 for metres).
  * X right-positive, Y forward-positive; no calibration offset is applied. */
 #define VISION_TARGET_TIMEOUT_MS 300U
 #define VISION_TARGET_HOLD_MS 1000U
@@ -39,11 +40,15 @@ typedef struct {
     uint8_t version, flags, mode, fallback, endpoint_valid, curvature_valid;
     int16_t endpoint_x_centi_cm, endpoint_y_centi_cm;
     float endpoint_abs_curvature_cm_inv;
+    /* V5 latest snapshot only. Independent of route valid; zero distance is valid.
+     * Unsigned 0.01 cm, no front/behind sign. Never use the motion hold for tape. */
+    uint8_t tape_detected;
+    uint16_t tape_distance_y_centi_cm;
 } VisionTarget;
 
 /* Atomic snapshot; also expires stale targets. Invalid/expired coordinates zero. */
 void Vision_GetTarget(VisionTarget *out);
-/* Last valid V3/V4 target, usable for <1000ms; invalid frames do not refresh it.
+/* Last valid V3/V4/V5 target, usable for <1000ms; invalid frames do not refresh it.
  * Metadata here belongs to that held frame, not the latest route. Use
  * Vision_GetTarget for fresh mode/endpoint telemetry, even with invalid target. */
 void Vision_GetControlTarget(VisionTarget *out);

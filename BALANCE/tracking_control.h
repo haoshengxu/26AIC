@@ -17,6 +17,13 @@ typedef struct {
     uint8_t has_sample;
     float route_speed_mps, active_pp_gain;
     uint8_t gain_initialized, gain_curve, launch_complete;
+    uint8_t gain_enter_count, gain_frame_seen;
+    uint32_t gain_last_accepted;
+    uint8_t tape_count;
+    uint8_t tape_state, tape_dwell_started, tape_clear_started;
+    uint32_t tape_seen_count, tape_first_ms, tape_last_ms, tape_stop_ms, tape_clear_ms;
+    uint32_t tape_recover_ms, tape_reliable_ms, tape_reliable_count;
+    float tape_distance_m, tape_resume_travel_m, tape_last_speed_mps;
 } TrackingController;
 
 /* State is the highest-priority active condition; reasons retain all flags. */
@@ -29,6 +36,8 @@ enum { TRACK_ROUTE_OFF, TRACK_ROUTE_NORMAL, TRACK_ROUTE_SINGLE,
 #define TRACK_REASON_HOLD       0x08U
 #define TRACK_REASON_SATURATED  0x10U
 
+enum { TAPE_SEARCH, TAPE_CONFIRM, TAPE_APPROACH, TAPE_BRAKE,
+       TAPE_WAIT, TAPE_PASS, TAPE_FAULT, TAPE_RECOVER, TAPE_FINISH };
 typedef struct {
     float error_m, derivative_mps, measured_speed_mps, denominator_mps;
     float p_rad, d_rad, stanley_rad, heading_rad;
@@ -39,6 +48,9 @@ typedef struct {
     uint8_t route_state, route_reasons;
     float active_pp_gain;
     uint8_t startup_active;
+    uint8_t tape_state, tape_count;
+    float tape_front_cm, tape_speed_limit, tape_wait_remaining_s;
+    float tape_recover_remaining_s;
     uint8_t gain_state; /* 0 straight, 1 curve, 2 unknown, 3 hold, 4 V3 */
 } TrackingOutput;
 
@@ -51,6 +63,8 @@ typedef struct {
     float hold_speed_mps, saturated_speed_mps, accel_mps2, decel_mps2;
     float pp_straight_gain, gain_curve_enter, gain_curve_exit;
     float start_accel_mps2;
+    float tape_decel_mps2, tape_gap_cm, tape_wait_s;
+    float tape_recover_angle_deg, tape_recover_speed_mps, tape_recover_time_s;
 } TrackingParameters;
 /* 100 Hz M3: V4 route-aware speeds; V3 retains the legacy X speed rule. */
 uint8_t Tracking_UpdateRoute(TrackingController *controller,

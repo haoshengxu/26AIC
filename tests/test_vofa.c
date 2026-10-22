@@ -67,10 +67,10 @@ void test_entry(void)
     huart3.gState = HAL_UART_STATE_READY;
     now_ms = 100; MOTOR_A.Encoder = 1.5f; MOTOR_B.Encoder = -0.5f;
     Vofa_Task();
-    REQUIRE(transmitted_size == 272 && tx_count == 1);
+    REQUIRE(transmitted_size == 368 && tx_count == 1);
     memcpy(&sample, transmitted, 4); REQUIRE(sample == 1.5f);
     memcpy(&sample, transmitted+4, 4); REQUIRE(sample == -0.5f);
-    REQUIRE(transmitted[268] == 0 && transmitted[269] == 0 && transmitted[270] == 0x80 && transmitted[271] == 0x7f);
+    REQUIRE(transmitted[364] == 0 && transmitted[365] == 0 && transmitted[366] == 0x80 && transmitted[367] == 0x7f);
     now_ms = 200; MOTOR_A.Encoder = 9; Vofa_Task();
     REQUIRE(tx_count == 1 && frame.channels[0] == 1.5f);
     huart3.gState = HAL_UART_STATE_READY; Vofa_Task();
@@ -109,7 +109,7 @@ void test_entry(void)
             REQUIRE(rejected==before+4);
         }
         receive_text("TRESET=1;");Tracking_GetParameters(&p);
-        REQUIRE(p.turn_x_threshold_cm==5 && p.turn_speed_gain==0.020f && p.turn_min_speed_mps==0.30f && p.speed_mps==0.45f);
+        REQUIRE(p.turn_x_threshold_cm==5 && p.turn_speed_gain==0.040f && p.turn_min_speed_mps==0.60f && p.speed_mps==0.90f);
     }
     case_id=6;
     receive_text("TPG=1.1;TCTH=0.9;TCK=0.1;TSINGLE=0.24;TFALL=0.19;TUNKNOWN=0.23;THOLD=0.16;TSAT=0.18;TACC=0.4;TDEC=0.9;");
@@ -132,11 +132,67 @@ void test_entry(void)
         REQUIRE(NEAR(frame.channels[45],0.19f,0.0001f) && NEAR(frame.channels[46],2,0.0001f) && NEAR(frame.channels[47],40,0.0001f));
         REQUIRE(frame.channels[48]==p.pp_gain && frame.channels[56]==p.accel_mps2);
         REQUIRE(NEAR(frame.channels[60],0.9f,0.0001f) && frame.channels[61]==1.0f && frame.channels[62]==0.5f);
-        REQUIRE(NEAR(frame.channels[63],1.18f,0.0001f) && frame.channels[64]==0);
+        REQUIRE(NEAR(frame.channels[63],0.9f,0.0001f) && frame.channels[64]==0);
         REQUIRE(NEAR(frame.channels[65],0.6f,0.0001f) && frame.channels[66]==1);
-        REQUIRE(transmitted_size==272 && transmitted[270]==0x80 && transmitted[271]==0x7F);
+        REQUIRE(transmitted_size==368 && transmitted[366]==0x80 && transmitted[367]==0x7F);
         receive_text("RUN=0;");now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
         REQUIRE(frame.channels[42]==0 && frame.channels[32]==0 && frame.channels[46]==0);
+    }
+    case_id=7;
+    receive_text("TTDEC=0.5;TTDIST=12;TTWAIT=2;");
+    now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
+    REQUIRE(frame.channels[72]==0.5f && frame.channels[73]==12 && frame.channels[74]==2);
+    {float before=rejected;receive_text("TTDEC=0;TTDIST=-1;TTWAIT=0;");REQUIRE(rejected==before+3);}
+    case_id=8;
+    receive_text("M=4;LKP=1200;LKI=200;RKP=1300;RKI=250;");
+    REQUIRE(MOTOR_A.Velocity_KP==1200 && MOTOR_A.Velocity_KI==200);
+    REQUIRE(MOTOR_B.Velocity_KP==1300 && MOTOR_B.Velocity_KI==250);
+    now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
+    REQUIRE(frame.channels[76]==1200 && frame.channels[77]==200 && frame.channels[78]==1300 && frame.channels[79]==250);
+    {float before=rejected;receive_text("LKP=-1;RKI=10001;M=3;LKI=100;");REQUIRE(rejected==before+3);}
+    REQUIRE(MOTOR_A.Velocity_KI==200 && MOTOR_B.Velocity_KI==250);
+    case_id=9;
+    receive_text("M=4;LKP=1000;LKI=100;RKP=2000;RKI=200;L=0.2;R=-0.1;RUN=1;");
+    advance(10);
+    now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
+    REQUIRE(NEAR(frame.channels[80],220,1) && NEAR(frame.channels[83],-220,1));
+    REQUIRE(NEAR(frame.channels[81],200,0.001f) && NEAR(frame.channels[82],20,0.001f));
+    REQUIRE(NEAR(frame.channels[84],-200,0.001f) && NEAR(frame.channels[85],-20,0.001f));
+    memcpy(&sample,transmitted+80*4,4);REQUIRE(sample==MOTOR_A.Motor_Pwm);
+    memcpy(&sample,transmitted+85*4,4);REQUIRE(NEAR(sample,-20,0.001f));
+    REQUIRE(transmitted_size==368 && transmitted[366]==0x80 && transmitted[367]==0x7F);
+    advance(10);now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
+    REQUIRE(NEAR(frame.channels[81],200,0.001f) && NEAR(frame.channels[82],40,0.001f));
+    REQUIRE(NEAR(frame.channels[84],-200,0.001f) && NEAR(frame.channels[85],-40,0.001f));
+    REQUIRE(NEAR(frame.channels[80],240,1) && NEAR(frame.channels[83],-240,1));
+    receive_text("LKI=0;");
+    REQUIRE(s_left_pi.integral==0 && s_left_pi.output==0);
+    REQUIRE(s_right_pi.integral!=0 && s_right_pi.output!=0);
+    receive_text("RUN=0;");now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
+    for(j=80;j<86;j++) REQUIRE(frame.channels[j]==0);
+    case_id=10;
+    receive_text("M=4;LKP=12673;RKP=30000;");
+    REQUIRE(MOTOR_A.Velocity_KP==12673 && MOTOR_B.Velocity_KP==30000);
+    now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
+    REQUIRE(frame.channels[76]==12673 && frame.channels[78]==30000);
+    receive_text("LKP=100000;RKP=100000.00;");
+    REQUIRE(MOTOR_A.Velocity_KP==100000 && MOTOR_B.Velocity_KP==100000);
+    {float before=rejected;
+     receive_text("LKP=100001;RKP=100000.5;LKI=10001;RKI=10001;LKP=-1;");
+     REQUIRE(rejected==before+5);
+     REQUIRE(MOTOR_A.Velocity_KP==100000 && MOTOR_B.Velocity_KP==100000);
+    }
+    receive_text("LKP=12345.5;");REQUIRE(MOTOR_A.Velocity_KP==12345.5f);
+    /* Other command limits still apply after lifting the numeric parser ceiling. */
+    {float before=rejected;receive_text("V=10001;TV=10001;");REQUIRE(rejected==before+2);}
+    {
+        float before=rejected;
+        receive_text("TBA=-12;TBV=0.65;TBT=1.5;");
+        now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
+        REQUIRE(frame.channels[86]==-12 && NEAR(frame.channels[87],0.65f,0.0001f) && frame.channels[88]==1.5f);
+        REQUIRE(frame.channels[89]==0 && frame.channels[90]==0);
+        receive_text("TBA=21;TBA=-21;TBV=0;TBV=1.601;TBT=0;TBT=5.1;");
+        REQUIRE(rejected==before+6);
     }
     finish(0);
 }

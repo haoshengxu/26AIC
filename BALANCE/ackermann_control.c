@@ -18,19 +18,26 @@ float Ack_AngleError(float target_deg, float current_deg)
 
 void Ack_SpeedReset(AckSpeedPI *pi)
 {
-    pi->output = 0.0f;
-    pi->last_error = 0.0f;
+    pi->output = pi->last_error = pi->integral = 0.0f;
+    pi->p_output = pi->i_output = 0.0f;
 }
 
 float Ack_SpeedUpdate(AckSpeedPI *pi, float target, float measured,
                       float kp, float ki)
 {
     float error = target - measured;
-    /* Incremental PI: u[k] = u[k-1] + Kp*(e[k]-e[k-1]) + Ki*e[k].
-     * Clamp the stored output as well as the PWM: no hidden windup. */
-    pi->output = Ack_Clamp(pi->output + kp * (error - pi->last_error) +
-                          ki * error, -ACK_MOTOR_PWM_LIMIT, ACK_MOTOR_PWM_LIMIT);
+    /* DIANSAI pid_formula_positional + PID_Task integral limiting.
+     * The source speed loops use Kd=0. Preserve per-sample integration and
+     * its ordering: calculate output first, then bound next tick's integral.
+     * Speed units stay m/s; gains and PWM remain in Demo1's native units. */
+    pi->integral += error;
+    pi->p_output = kp * error;
+    pi->i_output = ki * pi->integral;
+    pi->output = Ack_Clamp(pi->p_output + pi->i_output,
+                          -ACK_MOTOR_PWM_LIMIT, ACK_MOTOR_PWM_LIMIT);
     pi->last_error = error;
+    pi->integral = Ack_Clamp(pi->integral,
+        -ACK_SPEED_INTEGRAL_LIMIT, ACK_SPEED_INTEGRAL_LIMIT);
     return pi->output;
 }
 
