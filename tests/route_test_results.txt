@@ -2,4 +2,4 @@
   static __inline void __disable_irq(void) { irq_mask=1; }
                        ^
 tests/test_route.c: 1 warning, 0 errors
-PASS: route; 705 assertions; case 14/14; failure line 0; signature 0xacce5501
+PASS: route; 1145 assertions; case 14/14; failure line 0; signature 0xacce5501

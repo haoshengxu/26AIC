@@ -58,4 +58,8 @@ void Vision_UartError(void);
 void Vision_Get(VisionCommand *out);
 uint16_t Vision_Crc16(const uint8_t *data, uint16_t length);
 uint8_t Vision_CanRun(const VisionCommand *cmd, uint32_t now);
+/* MCU -> Jetson v1.9: returns 9 bytes, or 0 for invalid arguments. */
+void Vision_RequestLane(uint8_t mode);
+uint8_t Vision_TakeLaneCommand(uint8_t out[9]);
+uint8_t Vision_BuildLaneCommand(uint8_t out[9], uint16_t sequence, uint8_t mode);
 #endif

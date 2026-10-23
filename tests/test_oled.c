@@ -97,6 +97,10 @@ void test_entry(void)
         for(i=0;i<5;i++) REQUIRE(pixels(0,i*12,126,12)>0);
         REQUIRE(pixels(0,60,128,4)==0);
     }
+    memcpy(snapshot, OLED_GRAM, sizeof(snapshot));
+    fake_mode=MODE_CONTROL_VISION_NO_BLIND;
+    OLED_Clear();oled_show();
+    REQUIRE(memcmp(snapshot,OLED_GRAM,sizeof(snapshot))!=0);
     fake_mode=MODE_CONTROL_STRAIGHT_5S;
 
     case_id = 2;

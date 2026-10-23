@@ -87,7 +87,7 @@ static void ShowTracking(void)
     char line[48], a[16], b[16];
     Vision_GetControlTarget(&target);
     ModeControl_GetTrackingOutput(&out);
-    snprintf(line, sizeof(line), "M3 PP %-5s V:%u", StatusText(), (unsigned int)target.valid);
+    snprintf(line, sizeof(line), "M%u PP %-5s V:%u", (unsigned int)ModeControl_GetDisplayMode(), StatusText(), (unsigned int)target.valid);
     ShowLine(0U, line);
     TrackingNumber(a, target.x_centi_cm*0.0001f, 3U);
     TrackingNumber(b, target.y_centi_cm*0.0001f, 3U);
@@ -114,7 +114,8 @@ void oled_show(void)
         ShowDistance();
         return;
     }
-    if (ModeControl_GetDisplayMode() == MODE_CONTROL_VISION_LINE) {
+    if (ModeControl_GetDisplayMode() == MODE_CONTROL_VISION_LINE ||
+        ModeControl_GetDisplayMode() == MODE_CONTROL_VISION_NO_BLIND) {
         ShowTracking();
         return;
     }

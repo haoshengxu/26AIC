@@ -297,3 +297,29 @@ slide:
         memmove(buffer, buffer + 1, used);
     }
 }
+
+uint8_t Vision_BuildLaneCommand(uint8_t out[9], uint16_t sequence, uint8_t mode)
+{
+    uint16_t crc;
+    if(out==0 || mode>5U) return 0;
+    out[0]=0x55;out[1]=0xAA;out[2]=1;out[3]=9;
+    out[4]=(uint8_t)sequence;out[5]=(uint8_t)(sequence>>8);out[6]=mode;
+    crc=Vision_Crc16(out,7);out[7]=(uint8_t)crc;out[8]=(uint8_t)(crc>>8);
+    return 9;
+}
+
+static volatile uint8_t lane_pending, lane_mode;
+static uint16_t lane_sequence;
+void Vision_RequestLane(uint8_t mode)
+{
+    if(mode<=5U){lane_mode=mode;lane_pending=1;}
+}
+uint8_t Vision_TakeLaneCommand(uint8_t out[9])
+{
+    uint32_t mask=__get_PRIMASK();uint8_t mode;
+    __disable_irq();
+    if(!lane_pending){__set_PRIMASK(mask);return 0;}
+    mode=lane_mode;lane_pending=0;
+    __set_PRIMASK(mask);
+    return Vision_BuildLaneCommand(out,++lane_sequence,mode);
+}

@@ -5,4 +5,4 @@
   static uint32_t gpio_pins[16];
                   ^
 tests/test_oled.c: 2 warnings, 0 errors
-PASS: oled; 43 assertions; case 3/3; failure line 0; signature 0xacce5501
+PASS: oled; 44 assertions; case 3/3; failure line 0; signature 0xacce5501

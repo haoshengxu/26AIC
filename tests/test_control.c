@@ -182,6 +182,7 @@ void test_entry(void)
     single_click(); REQUIRE(ModeControl_IsActive());
     double_click(); REQUIRE(!ModeControl_IsActive() && ModeControl_GetDisplayMode() == MODE_CONTROL_VISION_LINE);
     double_click(); REQUIRE(!ModeControl_IsActive() && ModeControl_GetDisplayMode() == MODE_CONTROL_DEBUG);
+    double_click(); REQUIRE(!ModeControl_IsActive() && ModeControl_GetDisplayMode() == MODE_CONTROL_VISION_NO_BLIND);
     double_click(); REQUIRE(!ModeControl_IsActive() && ModeControl_GetDisplayMode() == MODE_CONTROL_STRAIGHT_5S);
     advance(1000); REQUIRE(!ModeControl_IsActive());
 
@@ -293,6 +294,7 @@ void test_entry(void)
     REQUIRE(ModeControl_DebugCommand("RUN",1.0f));
     advance(10);
     REQUIRE(MOTOR_A.Target == 0.8f && MOTOR_B.Target == -0.8f);
+    double_click(); REQUIRE(s_mode == MODE_CONTROL_VISION_NO_BLIND && !ModeControl_IsActive());
     double_click(); REQUIRE(s_mode == MODE_CONTROL_STRAIGHT_5S && !ModeControl_IsActive());
     case_id=14; /* Positional terms and DIANSAI post-calculation integral bound. */
     Ack_SpeedReset(&pi_a);

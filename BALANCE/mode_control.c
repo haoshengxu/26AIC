@@ -69,12 +69,12 @@ static void StartTask(void)
         StartBuzzer(ERROR_BEEP_MS);
         return;
     }
-    if (s_mode != MODE_CONTROL_VISION_LINE && s_mode != MODE_CONTROL_DEBUG && !Gyro6_IsValid()) {
+    if (s_mode != MODE_CONTROL_VISION_LINE && s_mode != MODE_CONTROL_VISION_NO_BLIND && s_mode != MODE_CONTROL_DEBUG && !Gyro6_IsValid()) {
         StopTask(MODE_STATUS_IMU_ERROR);
         StartBuzzer(ERROR_BEEP_MS);
         return;
     }
-    if (s_mode == MODE_CONTROL_VISION_LINE) {
+    if (s_mode == MODE_CONTROL_VISION_LINE || s_mode == MODE_CONTROL_VISION_NO_BLIND) {
         VisionCommand cmd;
         VisionTarget target;
         uint32_t mask = __get_PRIMASK();
@@ -167,6 +167,7 @@ void ModeControl_ButtonTask(void)
         s_mode = s_mode == MODE_CONTROL_STRAIGHT_5S ? MODE_CONTROL_TURN_90 :
                  s_mode == MODE_CONTROL_TURN_90 ? MODE_CONTROL_VISION_LINE :
                  s_mode == MODE_CONTROL_VISION_LINE ? MODE_CONTROL_DEBUG :
+                 s_mode == MODE_CONTROL_DEBUG ? MODE_CONTROL_VISION_NO_BLIND :
                  MODE_CONTROL_STRAIGHT_5S;
         s_elapsed_ms = 0U;
         StartBuzzer(SWITCH_BEEP_MS);
@@ -214,7 +215,7 @@ void ModeControl_Tick10ms(void)
         StartBuzzer(ERROR_BEEP_MS);
         return;
     }
-    if (s_mode != MODE_CONTROL_VISION_LINE && s_mode != MODE_CONTROL_DEBUG && !Gyro6_IsValid()) {
+    if (s_mode != MODE_CONTROL_VISION_LINE && s_mode != MODE_CONTROL_VISION_NO_BLIND && s_mode != MODE_CONTROL_DEBUG && !Gyro6_IsValid()) {
         StopTask(MODE_STATUS_IMU_ERROR);
         StartBuzzer(ERROR_BEEP_MS);
         return;
@@ -228,7 +229,7 @@ void ModeControl_Tick10ms(void)
         return;
     }
     yaw = Gyro6_GetYaw();
-    if (s_mode == MODE_CONTROL_VISION_LINE) {
+    if (s_mode == MODE_CONTROL_VISION_LINE || s_mode == MODE_CONTROL_VISION_NO_BLIND) {
         VisionCommand cmd;
         VisionTarget target, latest_route;
         TrackingParameters params;
@@ -258,11 +259,16 @@ void ModeControl_Tick10ms(void)
             StartBuzzer(ERROR_BEEP_MS);
             return;
         }
+        s_tracking.tape_skip_recover=(s_mode==MODE_CONTROL_VISION_NO_BLIND);
+        s_tracking.tape_lane_switch=(s_mode==MODE_CONTROL_VISION_LINE);
         if (!Tracking_UpdateRoute(&s_tracking, &target, &latest_route, now,
                 0.5f*(MOTOR_A.Encoder+MOTOR_B.Encoder), &params, &s_tracking_output)) {
             StopTask(MODE_STATUS_CONTROL_ERROR);
             StartBuzzer(ERROR_BEEP_MS);
             return;
+        }
+        if(s_tracking.tape_lane_event) {
+            Vision_RequestLane(5U);s_tracking.tape_lane_event=0;
         }
         s_status = MODE_STATUS_RUNNING;
         /* Drive_Motor -> Ack_Kinematics + Ack_ServoPulse; balance.c keeps
@@ -335,7 +341,7 @@ uint8_t ModeControl_DebugCommand(const char *key, float value)
     }
     /* Range comparisons reject NaN and infinity too. */
     if (!strcmp(key, "M")) {
-        if (!(value == 1.0f || value == 2.0f || value == 3.0f || value == 4.0f)) return 0;
+        if (!(value == 1.0f || value == 2.0f || value == 3.0f || value == 4.0f || value == 5.0f)) return 0;
         StopTask(MODE_STATUS_READY);
         s_mode = (ModeControl_Mode_t)(int)value;
         s_elapsed_ms = 0;
@@ -343,7 +349,7 @@ uint8_t ModeControl_DebugCommand(const char *key, float value)
     }
     if (!strcmp(key, "RUN")) {
         if (value == 0.0f) { StopTask(MODE_STATUS_STOPPED); return 1; }
-        if (value != 1.0f || (s_mode != MODE_CONTROL_DEBUG && s_mode != MODE_CONTROL_VISION_LINE)) return 0;
+        if (value != 1.0f || (s_mode != MODE_CONTROL_DEBUG && s_mode != MODE_CONTROL_VISION_LINE && s_mode != MODE_CONTROL_VISION_NO_BLIND)) return 0;
         if (!ModeControl_IsActive()) StartTask();
         return ModeControl_IsActive();
     }

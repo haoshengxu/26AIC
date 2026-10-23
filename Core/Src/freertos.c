@@ -26,6 +26,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "vofa_debug.h"
+#include "vision_command.h"
+#include "usart.h"
 #include "show.h"
 /* USER CODE END Includes */
 
@@ -161,6 +163,18 @@ void StartVofaTask(void *argument)
   /* USER CODE BEGIN StartVofaTask */
   (void)argument;
   for (;;) {
+    {
+      static uint8_t lane_frame[9], lane_pending, lane_restore;
+      static uint32_t lane_sent_ms;
+      if(lane_restore && (uint32_t)(HAL_GetTick()-lane_sent_ms)>=2500U) {
+        Vision_RequestLane(0U);lane_restore=0;
+      }
+      if(!lane_pending) lane_pending=Vision_TakeLaneCommand(lane_frame);
+      if(lane_pending && HAL_UART_Transmit(&huart1,lane_frame,9,2)==HAL_OK) {
+        lane_restore=(lane_frame[6]!=0U);lane_sent_ms=HAL_GetTick();
+        lane_pending=0;
+      }
+    }
     Vofa_Task();
     g_vofa_stack_free_words = uxTaskGetStackHighWaterMark(NULL);
     osDelay(2);

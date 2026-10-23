@@ -274,9 +274,9 @@ void test_entry(void)
         REQUIRE(s_tracking.tape_state==TAPE_WAIT); /* less than one second */
         advance(510);REQUIRE(s_tracking.tape_state==TAPE_RECOVER); /* blind departure without route */
         tape_frame(3270,1);advance(10);ModeControl_GetTrackingOutput(&out);
-        REQUIRE(out.tape_state==TAPE_RECOVER && NEAR(out.speed_mps,0.5f));
-        REQUIRE(NEAR(out.steer_left_rad,0.1745329252f));
-        for(j=0;j<20;j++){tape_frame(3270,1);advance(20);}
+        REQUIRE(out.tape_state==TAPE_PASS);
+        REQUIRE(out.steer_left_rad==0);
+        for(j=0;j<55;j++){tape_frame(3270,1);advance(20);}
         REQUIRE(s_tracking.tape_state==TAPE_PASS); /* same line ignored */
         left_count=(int)(0.5f*Encoder_precision/(Wheel_perimeter*100));right_count=-left_count;
         for(j=0;j<60;j++){tape_frame(0,0);advance(20);}
@@ -360,7 +360,7 @@ void test_entry(void)
         REQUIRE(c.tape_state==TAPE_FAULT && o.speed_mps==0);
         v.version=5;v.valid=v.link_alive=1;v.mode=1;v.y_centi_cm=5000;v.received_ms=3020;
         REQUIRE(Tracking_UpdateRoute(&c,&v,&v,3020,0,&p,&o));
-        REQUIRE(c.tape_state==TAPE_FAULT && o.speed_mps==0);
+        REQUIRE(c.tape_state==TAPE_PASS && o.speed_mps>0);
     }
     {
         TrackingController c;TrackingOutput o;TrackingParameters p;VisionTarget v;
@@ -389,6 +389,11 @@ void test_entry(void)
                 REQUIRE(c.tape_state==TAPE_SEARCH);
             }
         }
+        REQUIRE(c.tape_count==4 && c.tape_state!=TAPE_FINISH);
+        p.tape_finish_gap_cm=20;p.tape_gap_cm=5;
+        c.tape_distance_m=TRACK_REAR_TO_FRONT_M+0.204f;
+        v.tape_detected=0;v.received_ms=t;
+        REQUIRE(Tracking_UpdateRoute(&c,&v,&v,t,0,&p,&o));
         REQUIRE(c.tape_state==TAPE_FINISH && o.speed_mps==0 && o.tape_count==4);
         memset(&v,0,sizeof(v));t+=5000;
         REQUIRE(Tracking_UpdateRoute(&c,&v,&v,t,0,&p,&o));
@@ -444,6 +449,89 @@ void test_entry(void)
         Tracking_Reset(&c,&o);c.tape_state=TAPE_APPROACH;c.tape_distance_m=1;
         v.valid=0;v.link_alive=0;
         REQUIRE(!Tracking_UpdateRoute(&c,&v,&v,3020,0.1f,&p,&o));
+    }
+    {
+        TrackingController c;TrackingOutput o;TrackingParameters p;VisionTarget v;
+        uint32_t t;unsigned n;
+        for(n=1;n<=3;n+=2) {
+            Tracking_Reset(&c,&o);Tracking_DefaultParameters();Tracking_GetParameters(&p);
+            memset(&v,0,sizeof(v));v.version=5;v.valid=v.link_alive=1;
+            v.mode=1;v.y_centi_cm=5000;p.tape_recover_time_s=0.5f;
+            c.tape_count=n;c.tape_state=TAPE_RECOVER;c.tape_recover_ms=1000;
+            for(t=1010;t<2000;t+=10) {
+                v.received_ms=t;
+                REQUIRE(Tracking_UpdateRoute(&c,&v,&v,t,0,&p,&o));
+                REQUIRE(c.tape_state==TAPE_RECOVER);
+            }
+            v.received_ms=2000;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,2000,0,&p,&o));
+            REQUIRE(c.tape_state==TAPE_PASS);
+        }
+    }
+    {
+        TrackingController c;TrackingOutput o;TrackingParameters p;VisionTarget v;
+        Tracking_Reset(&c,&o);Tracking_DefaultParameters();Tracking_GetParameters(&p);
+        memset(&v,0,sizeof(v));c.tape_state=TAPE_WAIT;c.tape_skip_recover=1;
+        REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1000,0,&p,&o));
+        REQUIRE(Tracking_UpdateRoute(&c,&v,&v,2010,0,&p,&o));
+        REQUIRE(c.tape_state==TAPE_RECOVER && NEAR(o.speed_mps,p.hold_speed_mps));
+        REQUIRE(o.steer_left_rad==0);
+        v.valid=v.link_alive=1;v.version=5;v.mode=1;v.y_centi_cm=5000;v.received_ms=2020;
+        REQUIRE(Tracking_UpdateRoute(&c,&v,&v,2020,0,&p,&o));
+        REQUIRE(c.tape_state==TAPE_PASS && o.speed_mps>0);
+        c.tape_state=TAPE_RECOVER;c.tape_recover_ms=3000;
+        v.valid=0;v.received_ms=4000;
+        REQUIRE(Tracking_UpdateRoute(&c,&v,&v,4000,0,&p,&o));
+        REQUIRE(c.tape_state==TAPE_FAULT && o.speed_mps==0);
+        REQUIRE(ModeControl_DebugCommand("M",5));
+        REQUIRE(ModeControl_GetDisplayMode()==MODE_CONTROL_VISION_NO_BLIND);
+    }
+    {
+        uint8_t frame[9];
+        REQUIRE(Vision_BuildLaneCommand(frame,1,5)==9);
+        REQUIRE(frame[0]==0x55 && frame[1]==0xAA && frame[6]==5);
+        REQUIRE(frame[7]==0x67 && frame[8]==0x3B);
+    }
+    {
+        TrackingController c;TrackingOutput o;TrackingParameters p;VisionTarget v;
+        uint8_t n;
+        for(n=1;n<=3;n+=2) {
+            Tracking_Reset(&c,&o);Tracking_DefaultParameters();Tracking_GetParameters(&p);
+            memset(&v,0,sizeof(v));c.tape_state=TAPE_WAIT;c.tape_count=n;
+            c.tape_lane_switch=1;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1000,0,&p,&o));
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,2000,0,&p,&o));
+            REQUIRE(c.tape_state==TAPE_RECOVER);
+            REQUIRE(c.tape_lane_event==1);
+            REQUIRE(NEAR(o.speed_mps,p.hold_speed_mps));
+            REQUIRE(NEAR(o.steer_left_rad,n==3 ? -0.0523598776f : 0.0f));
+            v.valid=v.link_alive=1;v.version=5;v.mode=3;
+            v.y_centi_cm=5000;v.received_ms=2010;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,2010,0,&p,&o));
+            REQUIRE(c.tape_state==TAPE_PASS);
+        }
+    }
+    {
+        TrackingController c;TrackingOutput o;TrackingParameters p;VisionTarget v;
+        Tracking_Reset(&c,&o);Tracking_DefaultParameters();Tracking_GetParameters(&p);
+        memset(&v,0,sizeof(v));c.tape_state=TAPE_FAULT;c.tape_reliable_ms=1000;
+        v.valid=v.link_alive=1;v.version=5;v.mode=3;v.y_centi_cm=5000;
+        v.received_ms=1000;
+        REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1010,0,&p,&o));
+        REQUIRE(c.tape_state==TAPE_FAULT && o.speed_mps==0);
+        v.received_ms=1020;
+        REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1020,0,&p,&o));
+        REQUIRE(c.tape_state==TAPE_PASS && o.speed_mps>0);
+        c.tape_state=TAPE_FINISH;v.received_ms=1030;
+        REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1030,0,&p,&o));
+        REQUIRE(c.tape_state==TAPE_FINISH && o.speed_mps==0);
+    }
+    Tracking_DefaultParameters();
+    {
+        TrackingParameters p;Tracking_GetParameters(&p);
+        REQUIRE(p.tape_gap_cm==4.0f && p.tape_finish_gap_cm==1.0f);
+        REQUIRE(Tracking_SetParameter("TFDIST",1.0f));
+        REQUIRE(!Tracking_SetParameter("TFDIST",0.9f));
     }
     finish(0);
 }

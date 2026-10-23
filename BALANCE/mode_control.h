@@ -15,7 +15,8 @@ typedef enum {
     MODE_CONTROL_STRAIGHT_5S = 1,
     MODE_CONTROL_TURN_90 = 2,
     MODE_CONTROL_VISION_LINE = 3,
-    MODE_CONTROL_DEBUG = 4
+    MODE_CONTROL_DEBUG = 4,
+    MODE_CONTROL_VISION_NO_BLIND = 5
 } ModeControl_Mode_t;
 
 typedef enum {
