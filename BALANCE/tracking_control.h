@@ -21,6 +21,7 @@ typedef struct {
     uint32_t gain_last_accepted;
     uint8_t tape_count;
     uint8_t tape_skip_recover;
+    uint8_t finish_approach_limit;
     uint8_t tape_lane_switch, tape_lane_event;
     uint8_t tape_state, tape_dwell_started, tape_clear_started;
     uint32_t tape_seen_count, tape_first_ms, tape_last_ms, tape_stop_ms, tape_clear_ms;
@@ -68,6 +69,7 @@ typedef struct {
     float tape_decel_mps2, tape_gap_cm, tape_wait_s;
     float tape_recover_angle_deg, tape_recover_speed_mps, tape_recover_time_s;
     float tape_finish_gap_cm;
+    float finish_approach_speed_mps;
 } TrackingParameters;
 /* 100 Hz M3: V4 route-aware speeds; V3 retains the legacy X speed rule. */
 uint8_t Tracking_UpdateRoute(TrackingController *controller,

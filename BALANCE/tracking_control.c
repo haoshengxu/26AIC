@@ -17,7 +17,7 @@ static TrackingParameters parameters = {TRACK_BASE_SPEED_MPS, TRACK_KP,
     TRACK_HOLD_SPEED_MPS, TRACK_SAT_SPEED_MPS, TRACK_ACCEL_MPS2, TRACK_DECEL_MPS2,
     TRACK_PP_STRAIGHT_GAIN, TRACK_GAIN_CURVE_ENTER, TRACK_GAIN_CURVE_EXIT,
     TRACK_START_ACCEL_MPS2, TRACK_TAPE_DECEL_MPS2, TRACK_TAPE_GAP_CM, TRACK_TAPE_WAIT_S,
-    10.0f, TRACK_TAPE_RECOVER_SPEED, TRACK_TAPE_RECOVER_MS*0.001f, TRACK_TAPE_FINISH_GAP_CM};
+    10.0f, TRACK_TAPE_RECOVER_SPEED, TRACK_TAPE_RECOVER_MS*0.001f, TRACK_TAPE_FINISH_GAP_CM, TRACK_FINISH_APPROACH_SPEED};
 
 void Tracking_DefaultParameters(void)
 {
@@ -46,6 +46,7 @@ void Tracking_DefaultParameters(void)
     parameters.tape_decel_mps2 = TRACK_TAPE_DECEL_MPS2;
     parameters.tape_gap_cm = TRACK_TAPE_GAP_CM;
     parameters.tape_finish_gap_cm=TRACK_TAPE_FINISH_GAP_CM;
+    parameters.finish_approach_speed_mps=TRACK_FINISH_APPROACH_SPEED;
     parameters.tape_wait_s = TRACK_TAPE_WAIT_S;
     parameters.tape_recover_angle_deg=10.0f;
     parameters.tape_recover_speed_mps=TRACK_TAPE_RECOVER_SPEED;
@@ -62,7 +63,9 @@ void Tracking_GetParameters(TrackingParameters *out)
 
 uint8_t Tracking_SetParameter(const char *key, float value)
 {
-    if (!strcmp(key,"TFDIST") && value >= 1.0f && value <= 100.0f)
+    if (!strcmp(key,"TFV") && value >= 0.05f && value <= ACK_MAX_WHEEL_SPEED_MPS)
+        parameters.finish_approach_speed_mps=value;
+    else if (!strcmp(key,"TFDIST") && value >= 0.0f && value <= 100.0f)
         parameters.tape_finish_gap_cm=value;
     else if (!strcmp(key,"TBA") && value >= -20.0f && value <= 20.0f)
         parameters.tape_recover_angle_deg=value;
@@ -418,6 +421,8 @@ uint8_t Tracking_UpdateRoute(TrackingController *controller,
         }
     }
     if(controller->tape_state==TAPE_APPROACH || controller->tape_state==TAPE_BRAKE) {
+        if(controller->finish_approach_limit && controller->tape_count>=4U)
+            out->tape_speed_limit=fminf(out->tape_speed_limit,p->finish_approach_speed_mps);
         /* Apply after ordinary ramps: TDEC and curve floors cannot weaken tape braking. */
         out->requested_speed_mps=fminf(out->requested_speed_mps,out->tape_speed_limit);
         out->speed_mps=fminf(out->speed_mps,out->tape_speed_limit);

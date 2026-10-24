@@ -529,9 +529,27 @@ void test_entry(void)
     Tracking_DefaultParameters();
     {
         TrackingParameters p;Tracking_GetParameters(&p);
-        REQUIRE(p.tape_gap_cm==4.0f && p.tape_finish_gap_cm==1.0f);
-        REQUIRE(Tracking_SetParameter("TFDIST",1.0f));
-        REQUIRE(!Tracking_SetParameter("TFDIST",0.9f));
+        REQUIRE(p.tape_gap_cm==4.0f && p.tape_finish_gap_cm==0.5f);
+        REQUIRE(Tracking_SetParameter("TFDIST",0.5f));
+        REQUIRE(!Tracking_SetParameter("TFDIST",-0.1f));
+    }
+    {
+        TrackingController c;TrackingOutput o;TrackingParameters p;VisionTarget v;
+        unsigned mode;
+        Tracking_DefaultParameters();
+        REQUIRE(Tracking_SetParameter("TFV",0.2f));
+        REQUIRE(!Tracking_SetParameter("TFV",0));
+        Tracking_GetParameters(&p);
+        memset(&v,0,sizeof(v));v.valid=v.link_alive=1;v.version=5;
+        v.mode=1;v.y_centi_cm=5000;v.received_ms=1000;
+        for(mode=0;mode<2;mode++) {
+            Tracking_Reset(&c,&o);c.tape_count=4;c.tape_state=TAPE_APPROACH;
+            c.tape_distance_m=2;c.finish_approach_limit=mode;
+            c.route_speed_mps=0.8f;c.launch_complete=1;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1000,0.8f,&p,&o));
+            if(mode) REQUIRE(o.speed_mps<=0.2f);
+            else REQUIRE(o.speed_mps>0.2f);
+        }
     }
     finish(0);
 }

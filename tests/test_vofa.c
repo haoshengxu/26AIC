@@ -67,10 +67,10 @@ void test_entry(void)
     huart3.gState = HAL_UART_STATE_READY;
     now_ms = 100; MOTOR_A.Encoder = 1.5f; MOTOR_B.Encoder = -0.5f;
     Vofa_Task();
-    REQUIRE(transmitted_size == 372 && tx_count == 1);
+    REQUIRE(transmitted_size == 376 && tx_count == 1);
     memcpy(&sample, transmitted, 4); REQUIRE(sample == 1.5f);
     memcpy(&sample, transmitted+4, 4); REQUIRE(sample == -0.5f);
-    REQUIRE(transmitted[364] == 0 && transmitted[365] == 0 && transmitted[370] == 0x80 && transmitted[371] == 0x7f);
+    REQUIRE(transmitted[364] == 0 && transmitted[365] == 0 && transmitted[374] == 0x80 && transmitted[375] == 0x7f);
     now_ms = 200; MOTOR_A.Encoder = 9; Vofa_Task();
     REQUIRE(tx_count == 1 && frame.channels[0] == 1.5f);
     huart3.gState = HAL_UART_STATE_READY; Vofa_Task();
@@ -134,7 +134,7 @@ void test_entry(void)
         REQUIRE(NEAR(frame.channels[60],0.9f,0.0001f) && frame.channels[61]==1.0f && frame.channels[62]==0.5f);
         REQUIRE(NEAR(frame.channels[63],0.9f,0.0001f) && frame.channels[64]==0);
         REQUIRE(NEAR(frame.channels[65],0.6f,0.0001f) && frame.channels[66]==1);
-        REQUIRE(transmitted_size==372 && transmitted[370]==0x80 && transmitted[371]==0x7F);
+        REQUIRE(transmitted_size==376 && transmitted[374]==0x80 && transmitted[375]==0x7F);
         receive_text("RUN=0;");now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
         REQUIRE(frame.channels[42]==0 && frame.channels[32]==0 && frame.channels[46]==0);
     }
@@ -160,7 +160,7 @@ void test_entry(void)
     REQUIRE(NEAR(frame.channels[84],-200,0.001f) && NEAR(frame.channels[85],-20,0.001f));
     memcpy(&sample,transmitted+80*4,4);REQUIRE(sample==MOTOR_A.Motor_Pwm);
     memcpy(&sample,transmitted+85*4,4);REQUIRE(NEAR(sample,-20,0.001f));
-    REQUIRE(transmitted_size==372 && transmitted[370]==0x80 && transmitted[371]==0x7F);
+    REQUIRE(transmitted_size==376 && transmitted[374]==0x80 && transmitted[375]==0x7F);
     advance(10);now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
     REQUIRE(NEAR(frame.channels[81],200,0.001f) && NEAR(frame.channels[82],40,0.001f));
     REQUIRE(NEAR(frame.channels[84],-200,0.001f) && NEAR(frame.channels[85],-40,0.001f));

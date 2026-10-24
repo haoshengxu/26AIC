@@ -260,6 +260,7 @@ void ModeControl_Tick10ms(void)
             return;
         }
         s_tracking.tape_skip_recover=(s_mode==MODE_CONTROL_VISION_NO_BLIND);
+        s_tracking.finish_approach_limit=(s_mode==MODE_CONTROL_VISION_NO_BLIND);
         s_tracking.tape_lane_switch=(s_mode==MODE_CONTROL_VISION_LINE);
         if (!Tracking_UpdateRoute(&s_tracking, &target, &latest_route, now,
                 0.5f*(MOTOR_A.Encoder+MOTOR_B.Encoder), &params, &s_tracking_output)) {
