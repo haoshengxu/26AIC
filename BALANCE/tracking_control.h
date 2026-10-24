@@ -15,7 +15,7 @@ typedef struct {
     float last_error_m, derivative_mps;
     uint32_t last_sample_ms, last_frames;
     uint8_t has_sample;
-    float route_speed_mps, active_pp_gain;
+    float route_speed_mps, active_pp_gain, local_heading_rad;
     uint8_t gain_initialized, gain_curve, launch_complete;
     uint8_t gain_enter_count, gain_frame_seen;
     uint32_t gain_last_accepted;
@@ -70,6 +70,7 @@ typedef struct {
     float tape_recover_angle_deg, tape_recover_speed_mps, tape_recover_time_s;
     float tape_finish_gap_cm;
     float finish_approach_speed_mps;
+    float local_heading_gain, local_heading_limit_deg;
 } TrackingParameters;
 /* 100 Hz M3: V4 route-aware speeds; V3 retains the legacy X speed rule. */
 uint8_t Tracking_UpdateRoute(TrackingController *controller,

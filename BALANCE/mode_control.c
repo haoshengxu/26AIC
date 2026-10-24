@@ -252,7 +252,7 @@ void ModeControl_Tick10ms(void)
         if ((!target.valid || !target.link_alive) &&
             s_tracking.tape_state != TAPE_WAIT && s_tracking.tape_state != TAPE_FAULT &&
             s_tracking.tape_state != TAPE_RECOVER && s_tracking.tape_state != TAPE_FINISH &&
-            !(latest_route.version == 5U && latest_route.link_alive && latest_route.tape_detected &&
+            !((latest_route.version == 5U || latest_route.version == 6U) && latest_route.link_alive && latest_route.tape_detected &&
               s_tracking.tape_state != TAPE_PASS &&
               (uint32_t)(now-latest_route.received_ms)<TRACK_TAPE_GAP_MAX_MS)) {
             StopTask(MODE_STATUS_LINK_ERROR);

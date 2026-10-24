@@ -5,6 +5,7 @@
 #define VISION_FRAME_SIZE 14U
 #define VISION_ROUTE_FRAME_SIZE 22U
 #define VISION_TAPE_FRAME_SIZE 25U
+#define VISION_HEADING_FRAME_SIZE 32U
 #define VISION_TARGET_VALID 0x01U
 #define VISION_ENDPOINT_VALID 0x02U
 #define VISION_CURVATURE_VALID 0x04U
@@ -42,6 +43,9 @@ typedef struct {
     float endpoint_abs_curvature_cm_inv;
     /* V5 latest snapshot only. Independent of route valid; zero distance is valid.
      * Unsigned 0.01 cm, no front/behind sign. Never use the motion hold for tape. */
+    /* V6 local tangent: left-positive 0.01 degree, reference in rear-axle 0.01 cm. */
+    uint8_t heading_valid;
+    int16_t heading_centi_deg, heading_reference_x_centi_cm, heading_reference_y_centi_cm;
     uint8_t tape_detected;
     uint16_t tape_distance_y_centi_cm;
 } VisionTarget;

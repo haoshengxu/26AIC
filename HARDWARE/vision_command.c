@@ -11,7 +11,7 @@
 static volatile VisionCommand latest;
 static volatile VisionTarget target_latest;
 static volatile VisionTarget target_control;
-static uint8_t buffer[VISION_TAPE_FRAME_SIZE], used;
+static uint8_t buffer[VISION_HEADING_FRAME_SIZE], used;
 
 static void ClearRoute(volatile VisionTarget *target)
 {
@@ -20,6 +20,9 @@ static void ClearRoute(volatile VisionTarget *target)
     target->x_centi_cm = target->y_centi_cm = 0;
     target->endpoint_x_centi_cm = target->endpoint_y_centi_cm = 0;
     target->endpoint_abs_curvature_cm_inv = 0.0f;
+    target->heading_valid = 0U;
+    target->heading_centi_deg = 0;
+    target->heading_reference_x_centi_cm = target->heading_reference_y_centi_cm = 0;
     target->tape_detected = 0U;
     target->tape_distance_y_centi_cm = 0U;
 }
@@ -91,10 +94,11 @@ static uint8_t ParseTarget(uint32_t now)
 {
     uint16_t seq, delta;
     int16_t x, y;
-    uint8_t v5 = buffer[2] == 5U;
+    uint8_t v6 = buffer[2] == 6U;
+    uint8_t v5 = buffer[2] == 5U || v6;
     uint8_t v4 = buffer[2] == 4U || v5;
     uint8_t flags = buffer[6], mode = buffer[7];
-    uint8_t crc_offset = v5 ? 23U : (v4 ? 20U : 12U);
+    uint8_t crc_offset = v6 ? 30U : v5 ? 23U : (v4 ? 20U : 12U);
     uint32_t bits = 0U;
     float curvature = 0.0f;
     uint16_t crc = (uint16_t)(buffer[crc_offset] | ((uint16_t)buffer[crc_offset+1U] << 8));
@@ -131,6 +135,8 @@ static uint8_t ParseTarget(uint32_t now)
          (buffer[12] || buffer[13] || buffer[14] || buffer[15])) ||
         (!(flags & VISION_CURVATURE_VALID) &&
          (buffer[16] || buffer[17] || buffer[18] || buffer[19])))) goto bad_format;
+    if (v6 && (buffer[23] > 1U ||
+        (!buffer[23] && (buffer[24] || buffer[25] || buffer[26] || buffer[27] || buffer[28] || buffer[29])))) goto bad_format;
     seq = (uint16_t)(buffer[4] | ((uint16_t)buffer[5] << 8));
     delta = (uint16_t)(seq - target_latest.sequence);
     if (target_latest.has_frame) {
@@ -164,6 +170,13 @@ static uint8_t ParseTarget(uint32_t now)
         target_latest.tape_detected = buffer[20];
         target_latest.tape_distance_y_centi_cm = (uint16_t)(buffer[21] | ((uint16_t)buffer[22] << 8));
     }
+    if (v6 && buffer[23]) {
+        target_latest.heading_valid = 1U;
+        target_latest.heading_centi_deg = ReadSigned16(24U);
+        target_latest.heading_reference_x_centi_cm = ReadSigned16(26U);
+        target_latest.heading_reference_y_centi_cm = ReadSigned16(28U);
+    }
+    /* Heading is deliberately never copied into the one-second XY hold. */
     target_latest.has_frame = target_latest.link_alive = 1U;
     target_latest.received_ms = now;
     ++target_latest.accepted;
@@ -221,7 +234,7 @@ static uint8_t Parse(uint32_t now)
     int16_t speed, steer;
     uint8_t flags;
     /* V2 measurements never reach V1 motion/STOP/sequence handling. */
-    if (buffer[2] == 3U || buffer[2] == 4U || buffer[2] == 5U) return ParseTarget(now);
+    if (buffer[2] == 3U || buffer[2] == 4U || buffer[2] == 5U || buffer[2] == 6U) return ParseTarget(now);
     if (buffer[2] == 2U) return Distance_ProcessFrame(buffer, now);
     crc = (uint16_t)(buffer[12] | ((uint16_t)buffer[13] << 8));
     if (Vision_Crc16(buffer, 12U) != crc) {
@@ -272,16 +285,17 @@ void Vision_ProcessByte(uint8_t byte)
     uint32_t now = HAL_GetTick();
     uint8_t expected;
     ++latest.bytes;
-    buffer[used++] = byte; /* used is always < 25 on entry. */
+    buffer[used++] = byte; /* used is always < 32 on entry. */
     while (used) {
         if (buffer[0] != 0xAAU) goto slide;
         if (used < 2U) return;
         if (buffer[1] != 0x55U) goto slide;
         if (used < 4U) return;
-        expected = buffer[2] == 5U ? VISION_TAPE_FRAME_SIZE :
+        expected = buffer[2] == 6U ? VISION_HEADING_FRAME_SIZE :
+                   buffer[2] == 5U ? VISION_TAPE_FRAME_SIZE :
                    (buffer[2] == 4U ? VISION_ROUTE_FRAME_SIZE : VISION_FRAME_SIZE);
-        if ((buffer[2] < 1U || buffer[2] > 5U) || buffer[3] != expected) {
-            if (buffer[2] == 3U || buffer[2] == 4U || buffer[2] == 5U) ++target_latest.format_errors;
+        if ((buffer[2] < 1U || buffer[2] > 6U) || buffer[3] != expected) {
+            if (buffer[2] == 3U || buffer[2] == 4U || buffer[2] == 5U || buffer[2] == 6U) ++target_latest.format_errors;
             else if (buffer[2] == 2U) Distance_FormatError();
             else ++latest.format_errors;
             goto slide;

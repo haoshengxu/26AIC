@@ -40,7 +40,7 @@ static void start_route_fixture(void)
     ModeControl_DebugCommand("TACC",0.30f);
     ModeControl_DebugCommand("TSTART",0.30f);
     ModeControl_DebugCommand("TGEN",0.82f);
-    ModeControl_DebugCommand("TGEX",0.60f);
+    ModeControl_DebugCommand("TGEX",0.60f); ModeControl_DebugCommand("TTWAIT",1.0f);
 }
 static void tape_frame(uint16_t cm100,uint8_t detected)
 {
@@ -529,8 +529,8 @@ void test_entry(void)
     Tracking_DefaultParameters();
     {
         TrackingParameters p;Tracking_GetParameters(&p);
-        REQUIRE(p.tape_gap_cm==4.0f && p.tape_finish_gap_cm==0.5f);
-        REQUIRE(Tracking_SetParameter("TFDIST",0.5f));
+        REQUIRE(p.tape_gap_cm==7.0f && p.tape_finish_gap_cm==0.0f && p.finish_approach_speed_mps==1.0f && NEAR(p.tape_wait_s,0.30f));
+        REQUIRE(Tracking_SetParameter("TFDIST",0.0f) && Tracking_SetParameter("TTWAIT",0.30f) && !Tracking_SetParameter("TTWAIT",0.09f));
         REQUIRE(!Tracking_SetParameter("TFDIST",-0.1f));
     }
     {
@@ -551,5 +551,31 @@ void test_entry(void)
             else REQUIRE(o.speed_mps>0.2f);
         }
     }
+
+    {
+        TrackingController c;TrackingOutput o;TrackingParameters p;VisionTarget v;
+        Tracking_DefaultParameters();Tracking_GetParameters(&p);
+        REQUIRE(p.local_heading_gain==0);
+        REQUIRE(Tracking_SetParameter("THG",0.2f));REQUIRE(Tracking_SetParameter("THMAX",3));
+        REQUIRE(!Tracking_SetParameter("THG",-1));Tracking_GetParameters(&p);
+        memset(&v,0,sizeof(v));v.valid=v.link_alive=1;v.version=6;v.mode=1;
+        v.y_centi_cm=5000;v.received_ms=1000;v.endpoint_valid=v.curvature_valid=1;
+        v.endpoint_y_centi_cm=6000;v.heading_valid=1;v.heading_centi_deg=800;
+        v.heading_reference_y_centi_cm=4110;
+        Tracking_Reset(&c,&o);
+        REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1000,0.3f,&p,&o));
+        REQUIRE(o.heading_used && o.heading_rad>0 && o.steer_left_rad>0);
+        REQUIRE(o.heading_rad<=0.005237f);
+        v.heading_valid=0;Tracking_UpdateRoute(&c,&v,&v,1010,0.3f,&p,&o);
+        REQUIRE(!o.heading_used && o.heading_rad==0);
+        v.heading_valid=1;v.heading_reference_y_centi_cm=6000;
+        Tracking_UpdateRoute(&c,&v,&v,1020,0.3f,&p,&o);REQUIRE(!o.heading_used);
+        v.heading_reference_y_centi_cm=4110;v.endpoint_abs_curvature_cm_inv=0.02f;
+        Tracking_UpdateRoute(&c,&v,&v,1030,0.3f,&p,&o);REQUIRE(!o.heading_used);
+        v.endpoint_abs_curvature_cm_inv=0;v.heading_centi_deg=-800;
+        Tracking_UpdateRoute(&c,&v,&v,1040,0.3f,&p,&o);REQUIRE(o.heading_rad<0);
+        Tracking_UpdateRoute(&c,&v,&v,1300,0.3f,&p,&o);REQUIRE(!o.heading_used && o.heading_rad==0);
+    }
+
     finish(0);
 }

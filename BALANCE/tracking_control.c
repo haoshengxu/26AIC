@@ -17,10 +17,12 @@ static TrackingParameters parameters = {TRACK_BASE_SPEED_MPS, TRACK_KP,
     TRACK_HOLD_SPEED_MPS, TRACK_SAT_SPEED_MPS, TRACK_ACCEL_MPS2, TRACK_DECEL_MPS2,
     TRACK_PP_STRAIGHT_GAIN, TRACK_GAIN_CURVE_ENTER, TRACK_GAIN_CURVE_EXIT,
     TRACK_START_ACCEL_MPS2, TRACK_TAPE_DECEL_MPS2, TRACK_TAPE_GAP_CM, TRACK_TAPE_WAIT_S,
-    10.0f, TRACK_TAPE_RECOVER_SPEED, TRACK_TAPE_RECOVER_MS*0.001f, TRACK_TAPE_FINISH_GAP_CM, TRACK_FINISH_APPROACH_SPEED};
+    10.0f, TRACK_TAPE_RECOVER_SPEED, TRACK_TAPE_RECOVER_MS*0.001f, TRACK_TAPE_FINISH_GAP_CM, TRACK_FINISH_APPROACH_SPEED, 0.0f, 3.0f};
 
 void Tracking_DefaultParameters(void)
 {
+    parameters.local_heading_gain=0.0f;
+    parameters.local_heading_limit_deg=3.0f;
     parameters.speed_mps = TRACK_BASE_SPEED_MPS;
     parameters.kp = TRACK_KP;
     parameters.kd = TRACK_KD;
@@ -63,7 +65,11 @@ void Tracking_GetParameters(TrackingParameters *out)
 
 uint8_t Tracking_SetParameter(const char *key, float value)
 {
-    if (!strcmp(key,"TFV") && value >= 0.05f && value <= ACK_MAX_WHEEL_SPEED_MPS)
+    if (!strcmp(key,"THG") && value >= 0.0f && value <= 1.0f)
+        parameters.local_heading_gain=value;
+    else if (!strcmp(key,"THMAX") && value >= 0.0f && value <= 10.0f)
+        parameters.local_heading_limit_deg=value;
+    else if (!strcmp(key,"TFV") && value >= 0.05f && value <= ACK_MAX_WHEEL_SPEED_MPS)
         parameters.finish_approach_speed_mps=value;
     else if (!strcmp(key,"TFDIST") && value >= 0.0f && value <= 100.0f)
         parameters.tape_finish_gap_cm=value;
@@ -77,7 +83,7 @@ uint8_t Tracking_SetParameter(const char *key, float value)
         parameters.tape_decel_mps2 = value;
     else if (!strcmp(key,"TTDIST") && value >= 2.0f && value <= 100.0f)
         parameters.tape_gap_cm = value;
-    else if (!strcmp(key,"TTWAIT") && value >= 0.5f && value <= 30.0f)
+    else if (!strcmp(key,"TTWAIT") && value >= 0.1f && value <= 30.0f)
         parameters.tape_wait_s = value;
     else if (!strcmp(key,"TV") && value >= 0.01f && value <= ACK_MAX_WHEEL_SPEED_MPS)
         parameters.speed_mps = value;
@@ -146,7 +152,7 @@ static uint8_t Tracking_Finite(float value)
 static void TapeLimit(TrackingController *c, const VisionTarget *v, uint32_t now,
                       float measured, const TrackingParameters *p, TrackingOutput *o)
 {
-    uint8_t fresh=v->version==5U && v->link_alive &&
+    uint8_t fresh=(v->version==5U || v->version==6U) && v->link_alive &&
         (uint32_t)(now-v->received_ms)<TRACK_TAPE_GAP_MAX_MS;
     uint8_t seen=fresh && v->tape_detected;
     float remaining, a, delay, speed;
@@ -293,6 +299,9 @@ uint8_t Tracking_UpdateRoute(TrackingController *controller,
     uint8_t fresh, v4, curve_known;
     float gain;
     memset(out, 0, sizeof(*out));
+    if (controller->tape_state==TAPE_WAIT || controller->tape_state==TAPE_RECOVER ||
+        controller->tape_state==TAPE_FAULT || controller->tape_state==TAPE_FINISH)
+        controller->local_heading_rad=0.0f;
     TapeLimit(controller,latest,now,measured_speed,p,out);
     if (TapeWait(controller,latest,now,measured_speed,p,out)) return 1U;
     if (TapeRecover(controller,latest,now,p,out)) return 1U;
@@ -307,8 +316,8 @@ uint8_t Tracking_UpdateRoute(TrackingController *controller,
     fresh = latest->link_alive && latest->valid &&
         (uint32_t)(now-latest->received_ms) < TRACK_ROUTE_FRESH_MS &&
         (uint32_t)(now-control->received_ms) < TRACK_ROUTE_FRESH_MS;
-    v4 = (control->version == 4U || control->version == 5U);
-    curve_known = v4 && (latest->version == 4U || latest->version == 5U) && latest->link_alive &&
+    v4 = (control->version == 4U || control->version == 5U || control->version == 6U);
+    curve_known = v4 && (latest->version == 4U || latest->version == 5U || latest->version == 6U) && latest->link_alive &&
         (uint32_t)(now-latest->received_ms) < TRACK_ROUTE_FRESH_MS &&
         latest->endpoint_valid && latest->endpoint_y_centi_cm > 0 && latest->curvature_valid;
     if (!controller->gain_initialized) {
@@ -355,6 +364,26 @@ uint8_t Tracking_UpdateRoute(TrackingController *controller,
     if (!Ack_PurePursuitGain(x,y,gain,&out->steer_left_rad)) return 0U;
     out->active_pp_gain = gain;
     out->raw_steer_left_rad = atanf(ACK_WHEELBASE_M*gain*curvature);
+    /* Local heading is an optional straight-road supplement, never a held yaw.
+     * Reference must remain near the calibrated 41.1 cm forward sample.
+     * Endpoint curvature is only a conservative gate, not signed feedforward. */
+    if (fresh && latest->version==6U && latest->heading_valid &&
+        !latest->fallback && curve_known && !controller->gain_curve &&
+        latest->endpoint_abs_curvature_cm_inv*100.0f <= p->gain_curve_exit &&
+        latest->heading_reference_y_centi_cm>=2500 && latest->heading_reference_y_centi_cm<=5500 &&
+        latest->heading_reference_x_centi_cm>=-2000 && latest->heading_reference_x_centi_cm<=2000 &&
+        latest->heading_centi_deg>=-3000 && latest->heading_centi_deg<=3000 &&
+        p->local_heading_gain>0.0f) {
+        float limit=p->local_heading_limit_deg*0.0174532925f;
+        float desired=Ack_Clamp(p->local_heading_gain*latest->heading_centi_deg*0.000174532925f,-limit,limit);
+        controller->local_heading_rad += Ack_Clamp(desired-controller->local_heading_rad,
+            -0.523598776f*ACK_CONTROL_DT_S,0.523598776f*ACK_CONTROL_DT_S);
+        controller->local_heading_rad=Ack_Clamp(controller->local_heading_rad,-limit,limit);
+        out->heading_used=1U;
+    } else controller->local_heading_rad=0.0f;
+    out->heading_rad=controller->local_heading_rad;
+    out->raw_steer_left_rad+=out->heading_rad;
+    out->steer_left_rad=Ack_Clamp(out->raw_steer_left_rad,-ACK_MAX_STEER_RAD,ACK_MAX_STEER_RAD);
     out->control_x_m = out->error_m = x;
     out->control_y_m = y;
     out->correction_right_rad = -out->steer_left_rad;

@@ -26,10 +26,10 @@
 #define TRACK_DECEL_MPS2            1.60f
 /* Yellow tape: front clearance, braking plan, confirmed-stop dwell. */
 #define TRACK_TAPE_DECEL_MPS2       0.80f
-#define TRACK_FINISH_APPROACH_SPEED 0.25f
-#define TRACK_TAPE_FINISH_GAP_CM    0.5f
-#define TRACK_TAPE_GAP_CM           4.0f
-#define TRACK_TAPE_WAIT_S           1.0f
+#define TRACK_FINISH_APPROACH_SPEED 1.00f
+#define TRACK_TAPE_FINISH_GAP_CM    0.0f
+#define TRACK_TAPE_GAP_CM           7.0f
+#define TRACK_TAPE_WAIT_S           0.30f
 #define TRACK_TAPE_RECOVER_MS       1000U
 #define TRACK_TAPE_RECOVER_SPEED    0.50f
 #define TRACK_TAPE_RECOVER_LEFT_RAD 0.1745329252f

@@ -8,7 +8,7 @@
 #include <string.h>
 
 #define RX_SIZE 256U
-#define CHANNELS 93U
+#define CHANNELS 101U
 static uint8_t rx_byte;
 static volatile uint8_t rx_ring[RX_SIZE];
 static volatile unsigned int rx_head, rx_tail, rx_fault;
@@ -198,6 +198,14 @@ void Vofa_Task(void)
     frame.channels[90] = output.tape_recover_remaining_s;
     frame.channels[91] = params.tape_finish_gap_cm;
     frame.channels[92] = params.finish_approach_speed_mps;
+    frame.channels[93] = target.heading_valid;
+    frame.channels[94] = target.heading_centi_deg*0.01f;
+    frame.channels[95] = target.heading_reference_x_centi_cm*0.01f;
+    frame.channels[96] = target.heading_reference_y_centi_cm*0.01f;
+    frame.channels[97] = output.heading_rad*57.2957795f;
+    frame.channels[98] = params.local_heading_gain;
+    frame.channels[99] = params.local_heading_limit_deg;
+    frame.channels[100] = output.heading_used;
     frame.channels[76] = MOTOR_A.Velocity_KP;
     frame.channels[77] = MOTOR_A.Velocity_KI;
     frame.channels[78] = MOTOR_B.Velocity_KP;

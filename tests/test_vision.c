@@ -519,5 +519,31 @@ void test_entry(void)
         start_m3();send_bytes(examples[2],25);advance(10);REQUIRE(s_status==MODE_STATUS_WAIT_COMMAND);
         send_bytes(examples[0],25);advance(10);REQUIRE(s_status==MODE_STATUS_RUNNING);
     }
+
+    case_id=30;reset();
+    {
+        const uint8_t sample[32]={0xAA,0x55,6,32,1,0,7,2,0x38,0xFF,0x94,0x11,0,0,0x70,0x17,0x0A,0xD7,0x23,0x3C,1,0xA0,0x0F,1,0x20,3,0x9C,0xFF,0x0E,0x10,6,0xFE};
+        VisionTarget t,h;uint8_t b[32];uint16_t crc;unsigned j;
+        for(j=1;j<32;j++) {
+            Vision_Init();send_bytes(sample,j);Vision_GetTarget(&t);REQUIRE(!t.has_frame);
+            send_bytes(sample+j,32-j);Vision_GetTarget(&t);
+            REQUIRE(t.version==6 && t.valid && t.heading_valid && t.heading_centi_deg==800);
+            REQUIRE(t.x_centi_cm==-200 && t.y_centi_cm==4500);
+            REQUIRE(t.heading_reference_x_centi_cm==-100 && t.heading_reference_y_centi_cm==4110);
+            REQUIRE(t.tape_detected && t.tape_distance_y_centi_cm==4000);
+        }
+        Vision_GetControlTarget(&h);REQUIRE(h.valid && !h.heading_valid);
+        memcpy(b,sample,32);memset(b+23,0,7);b[20]=b[21]=b[22]=0;
+        crc=Vision_Crc16(b,30);b[30]=crc;b[31]=crc>>8;send_bytes(b,32);
+        Vision_GetTarget(&t);REQUIRE(t.valid && !t.heading_valid && !t.heading_centi_deg && !t.tape_detected);
+        b[30]^=1;send_bytes(b,32);send_bytes(sample,32);Vision_GetTarget(&t);
+        REQUIRE(t.heading_valid && t.crc_errors>=1);
+        memcpy(b,sample,32);b[6]=0;b[7]=0;memset(b+8,0,12);
+        crc=Vision_Crc16(b,30);b[30]=crc;b[31]=crc>>8;send_bytes(b,32);
+        Vision_GetTarget(&t);REQUIRE(!t.valid && t.heading_valid);
+        now_ms+=300;Vision_GetTarget(&t);REQUIRE(!t.link_alive && !t.heading_valid && !t.heading_reference_y_centi_cm);
+        send_bytes(sample,32);Vision_UartError();Vision_GetTarget(&t);REQUIRE(!t.heading_valid);
+    }
+
     finish(0);
 }
