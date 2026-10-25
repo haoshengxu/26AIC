@@ -35,6 +35,14 @@
 #define TRACK_TAPE_RECOVER_MS       1000U
 #define TRACK_TAPE_RECOVER_SPEED    0.50f
 #define TRACK_TAPE_RECOVER_LEFT_RAD 0.1745329252f
+#define TRACK_TAPE1_STRAIGHT_S      0.00f
+#define TRACK_TAPE1_RIGHT_DEG       10.4f
+#define TRACK_TAPE1_SPEED_MPS       0.33f
+#define TRACK_TAPE1_MAX_S           2.00f
+#define TRACK_TAPE3_STRAIGHT_S      0.70f
+#define TRACK_TAPE3_RIGHT_DEG       4.7f
+#define TRACK_TAPE3_SPEED_MPS       0.32f
+#define TRACK_TAPE3_MAX_S           2.80f
 #define TRACK_REAR_TO_FRONT_M       0.227f
 #define TRACK_TAPE_CONFIRM_MS       100U
 #define TRACK_TAPE_GAP_MAX_MS       100U

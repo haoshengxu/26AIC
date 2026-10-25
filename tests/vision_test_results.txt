@@ -1,8 +1,8 @@
-"tests/shims/stm32f4xx_hal.h", line 14: Warning:  #2687-D: declaration hides built-in function "__disable_irq" 
-  static __inline void __disable_irq(void) { irq_mask=1; }
-                       ^
-"tests/test_vision.c", line 29: Warning:  #550-D: variable "buzzer"  was set but never used
-  static GPIO_PinState user_key = GPIO_PIN_SET, buzzer;
-                                                ^
-tests/test_vision.c: 2 warnings, 0 errors
+"tests/shims/stm32f4xx_hal.h", line 14: Warning:  #2687-D: declaration hides built-in function "__disable_irq" 
+  static __inline void __disable_irq(void) { irq_mask=1; }
+                       ^
+"tests/test_vision.c", line 29: Warning:  #550-D: variable "buzzer"  was set but never used
+  static GPIO_PinState user_key = GPIO_PIN_SET, buzzer;
+                                                ^
+tests/test_vision.c: 2 warnings, 0 errors
 PASS: vision; 455 assertions; case 30/30; failure line 0; signature 0xacce5501

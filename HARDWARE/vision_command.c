@@ -12,6 +12,8 @@ static volatile VisionCommand latest;
 static volatile VisionTarget target_latest;
 static volatile VisionTarget target_control;
 static uint8_t buffer[VISION_HEADING_FRAME_SIZE], used;
+static volatile uint32_t lane_auto_sent_ms;
+static volatile uint8_t lane_last_sent_mode, lane_has_sent;
 
 static void ClearRoute(volatile VisionTarget *target)
 {
@@ -51,6 +53,7 @@ void Vision_Init(void)
     memset((void *)&target_latest, 0, sizeof(target_latest));
     memset((void *)&target_control, 0, sizeof(target_control));
     used = 0U;
+    lane_has_sent=0;lane_auto_sent_ms=0;lane_last_sent_mode=0;
     Distance_Init();
 }
 
@@ -324,6 +327,25 @@ uint8_t Vision_BuildLaneCommand(uint8_t out[9], uint16_t sequence, uint8_t mode)
 
 static volatile uint8_t lane_pending, lane_mode;
 static uint16_t lane_sequence;
+void Vision_OnLaneSent(uint8_t mode, uint32_t now)
+{
+    uint32_t mask=__get_PRIMASK();
+    __disable_irq();
+    lane_last_sent_mode=mode;lane_has_sent=1;
+    if(mode==0U) lane_auto_sent_ms=now;
+    __set_PRIMASK(mask);
+}
+uint8_t Vision_LaneAutoRestored(uint32_t requested_ms, uint32_t frame_ms)
+{
+    uint8_t restored;
+    uint32_t mask=__get_PRIMASK();
+    __disable_irq();
+    restored=lane_has_sent && lane_last_sent_mode==0U &&
+        (int32_t)(lane_auto_sent_ms-requested_ms)>=0 &&
+        (int32_t)(frame_ms-lane_auto_sent_ms)>0;
+    __set_PRIMASK(mask);
+    return restored;
+}
 void Vision_RequestLane(uint8_t mode)
 {
     if(mode<=5U){lane_mode=mode;lane_pending=1;}

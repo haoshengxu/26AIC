@@ -171,6 +171,7 @@ void StartVofaTask(void *argument)
       }
       if(!lane_pending) lane_pending=Vision_TakeLaneCommand(lane_frame);
       if(lane_pending && HAL_UART_Transmit(&huart1,lane_frame,9,2)==HAL_OK) {
+        Vision_OnLaneSent(lane_frame[6],HAL_GetTick());
         lane_restore=(lane_frame[6]!=0U);lane_sent_ms=HAL_GetTick();
         lane_pending=0;
       }

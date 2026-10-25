@@ -17,7 +17,9 @@ static TrackingParameters parameters = {TRACK_BASE_SPEED_MPS, TRACK_KP,
     TRACK_HOLD_SPEED_MPS, TRACK_SAT_SPEED_MPS, TRACK_ACCEL_MPS2, TRACK_DECEL_MPS2,
     TRACK_PP_STRAIGHT_GAIN, TRACK_GAIN_CURVE_ENTER, TRACK_GAIN_CURVE_EXIT,
     TRACK_START_ACCEL_MPS2, TRACK_TAPE_DECEL_MPS2, TRACK_TAPE_GAP_CM, TRACK_TAPE_WAIT_S,
-    10.0f, TRACK_TAPE_RECOVER_SPEED, TRACK_TAPE_RECOVER_MS*0.001f, TRACK_TAPE_FINISH_GAP_CM, TRACK_FINISH_APPROACH_SPEED, 0.0f, 3.0f, TRACK_FINISH_BLIND_SPEED_MPS, TRACK_FINISH_BLIND_TIME_S};
+    10.0f, TRACK_TAPE_RECOVER_SPEED, TRACK_TAPE_RECOVER_MS*0.001f, TRACK_TAPE_FINISH_GAP_CM, TRACK_FINISH_APPROACH_SPEED, 0.0f, 3.0f, TRACK_FINISH_BLIND_SPEED_MPS, TRACK_FINISH_BLIND_TIME_S,
+    TRACK_TAPE1_STRAIGHT_S, TRACK_TAPE1_RIGHT_DEG, TRACK_TAPE1_SPEED_MPS, TRACK_TAPE1_MAX_S,
+    TRACK_TAPE3_STRAIGHT_S, TRACK_TAPE3_RIGHT_DEG, TRACK_TAPE3_SPEED_MPS, TRACK_TAPE3_MAX_S};
 
 void Tracking_DefaultParameters(void)
 {
@@ -55,6 +57,14 @@ void Tracking_DefaultParameters(void)
     parameters.tape_recover_angle_deg=10.0f;
     parameters.tape_recover_speed_mps=TRACK_TAPE_RECOVER_SPEED;
     parameters.tape_recover_time_s=TRACK_TAPE_RECOVER_MS*0.001f;
+    parameters.tape1_straight_s = TRACK_TAPE1_STRAIGHT_S;
+    parameters.tape1_right_deg = TRACK_TAPE1_RIGHT_DEG;
+    parameters.tape1_speed_mps = TRACK_TAPE1_SPEED_MPS;
+    parameters.tape1_max_s = TRACK_TAPE1_MAX_S;
+    parameters.tape3_straight_s = TRACK_TAPE3_STRAIGHT_S;
+    parameters.tape3_right_deg = TRACK_TAPE3_RIGHT_DEG;
+    parameters.tape3_speed_mps = TRACK_TAPE3_SPEED_MPS;
+    parameters.tape3_max_s = TRACK_TAPE3_MAX_S;
 }
 
 void Tracking_GetParameters(TrackingParameters *out)
@@ -67,7 +77,23 @@ void Tracking_GetParameters(TrackingParameters *out)
 
 uint8_t Tracking_SetParameter(const char *key, float value)
 {
-    if (!strcmp(key,"THG") && value >= 0.0f && value <= 1.0f)
+    if (!strcmp(key,"T1BT") && value >= 0.0f && value <= 5.0f)
+        parameters.tape1_straight_s=value;
+    else if (!strcmp(key,"T3BT") && value >= 0.0f && value <= 5.0f)
+        parameters.tape3_straight_s=value;
+    else if (!strcmp(key,"T1BA") && value >= 0.0f && value <= 20.0f)
+        parameters.tape1_right_deg=value;
+    else if (!strcmp(key,"T3BA") && value >= 0.0f && value <= 20.0f)
+        parameters.tape3_right_deg=value;
+    else if (!strcmp(key,"T1BV") && value >= 0.05f && value <= ACK_MAX_WHEEL_SPEED_MPS)
+        parameters.tape1_speed_mps=value;
+    else if (!strcmp(key,"T3BV") && value >= 0.05f && value <= ACK_MAX_WHEEL_SPEED_MPS)
+        parameters.tape3_speed_mps=value;
+    else if (!strcmp(key,"T1BMAX") && value >= 0.1f && value <= 5.0f)
+        parameters.tape1_max_s=value;
+    else if (!strcmp(key,"T3BMAX") && value >= 0.1f && value <= 5.0f)
+        parameters.tape3_max_s=value;
+    else if (!strcmp(key,"THG") && value >= 0.0f && value <= 1.0f)
         parameters.local_heading_gain=value;
     else if (!strcmp(key,"THMAX") && value >= 0.0f && value <= 10.0f)
         parameters.local_heading_limit_deg=value;
@@ -184,6 +210,7 @@ static void TapeLimit(TrackingController *c, const VisionTarget *v, uint32_t now
                (uint32_t)(v->received_ms-c->tape_first_ms)>=TRACK_TAPE_CONFIRM_MS)
             {
                 if(c->tape_count<4U) ++c->tape_count;
+                c->tape_entry_active=0;
                 c->tape_state=TAPE_APPROACH;
             }
         }
@@ -216,6 +243,105 @@ static void TapeLimit(TrackingController *c, const VisionTarget *v, uint32_t now
     o->tape_count=c->tape_count;
 }
 
+static uint8_t TapeLaneEntry(const TrackingController *c)
+{
+    return c->tape_lane_switch && (c->tape_count==1U || c->tape_count==3U);
+}
+
+static void TapeEntryBegin(TrackingController *c,const TrackingParameters *p)
+{
+    uint8_t first=c->tape_count==1U;
+    c->tape_entry_active=1;c->tape_entry_visual=0;
+    c->tape_entry_blending=0;c->tape_entry_last_steer_rad=0.0f;
+    c->tape_entry_straight_s=first ? p->tape1_straight_s : p->tape3_straight_s;
+    c->tape_entry_right_deg=first ? p->tape1_right_deg : p->tape3_right_deg;
+    c->tape_entry_speed_mps=first ? p->tape1_speed_mps : p->tape3_speed_mps;
+    c->tape_entry_max_s=first ? p->tape1_max_s : p->tape3_max_s;
+}
+
+/* The lane timer runs independently in the TX task. Accept other boundary modes
+ * only after that task actually transmits its automatic-mode restoration. */
+static uint8_t TapeEntryReliable(const TrackingController *c,const VisionTarget *v,uint32_t now)
+{
+    return v->valid && v->link_alive &&
+        (uint32_t)(now-v->received_ms)<TRACK_TAPE_GAP_MAX_MS &&
+        (int32_t)(v->received_ms-c->tape_recover_ms)>0 &&
+        (v->mode==3U || Vision_LaneAutoRestored(c->tape_recover_ms,v->received_ms));
+}
+
+static void TapeEntryCount(TrackingController *c,const VisionTarget *v,uint8_t reliable)
+{
+    if(!reliable) {
+        c->tape_reliable_count=0;
+        if((int32_t)(v->received_ms-c->tape_reliable_ms)>0)
+            c->tape_reliable_ms=v->received_ms;
+    } else if((int32_t)(v->received_ms-c->tape_reliable_ms)>0) {
+        if((uint32_t)(v->received_ms-c->tape_reliable_ms)>=TRACK_TAPE_GAP_MAX_MS)
+            c->tape_reliable_count=0;
+        if(c->tape_reliable_count<3U) ++c->tape_reliable_count;
+        c->tape_reliable_ms=v->received_ms;
+    }
+}
+
+/* Return to the same departure guidance on loss; the original deadline and
+ * straight phase never restart. Late recovery remains stopped until 3 frames. */
+static uint8_t TapeEntry(TrackingController *c,const VisionTarget *v,uint32_t now,
+                         const TrackingParameters *p,TrackingOutput *o)
+{
+    float elapsed;
+    uint8_t reliable;
+    if(!TapeLaneEntry(c)) return 0;
+    if(!c->tape_entry_active) {
+        if(c->tape_state!=TAPE_RECOVER && c->tape_state!=TAPE_FAULT) return 0;
+        TapeEntryBegin(c,p);
+    }
+    elapsed=(uint32_t)(now-c->tape_recover_ms)*0.001f;
+    reliable=TapeEntryReliable(c,v,now);
+    o->tape_recover_remaining_s=fmaxf(c->tape_entry_max_s-elapsed,0.0f);
+    o->tape_entry_straight_remaining_s=fmaxf(c->tape_entry_straight_s-elapsed,0.0f);
+    if(c->tape_entry_visual && reliable) {
+        o->tape_entry_phase=3;
+        if(elapsed>=c->tape_entry_max_s) {
+            c->tape_entry_active=0;o->tape_entry_phase=0;
+        }
+        return 0;
+    }
+    if(c->tape_entry_visual) {
+        c->tape_entry_visual=0;c->tape_reliable_count=0;
+        c->tape_reliable_ms=v->received_ms;
+        c->tape_state=TAPE_RECOVER;c->local_heading_rad=0.0f;
+        c->tape_entry_blending=0;
+    }
+    TapeEntryCount(c,v,reliable);
+    /* At the deadline, stop first. A later group of frames may resume vision. */
+    if(c->tape_state!=TAPE_FAULT && elapsed>=c->tape_entry_max_s) {
+        c->tape_state=TAPE_FAULT;c->tape_reliable_count=0;
+        c->tape_reliable_ms=now;
+    }
+    if(c->tape_reliable_count>=3U && elapsed>=c->tape_entry_straight_s) {
+        c->tape_state=TAPE_PASS;c->launch_complete=0;c->tape_entry_visual=1;
+        c->tape_entry_blending=1;c->tape_entry_blend_ms=now;
+        c->tape_entry_blend_from_rad=c->tape_entry_last_steer_rad;
+        if(elapsed>=c->tape_entry_max_s) c->tape_entry_active=0;
+        o->tape_entry_phase=c->tape_entry_active ? 3 : 0;
+        return 0;
+    }
+    o->valid=1;
+    if(c->tape_state==TAPE_FAULT) {
+        c->route_speed_mps=0;o->tape_entry_phase=4;
+        c->tape_entry_last_steer_rad=0.0f;
+    } else {
+        o->tape_entry_phase=elapsed<c->tape_entry_straight_s ? 1 : 2;
+        o->speed_mps=o->requested_speed_mps=c->route_speed_mps=c->tape_entry_speed_mps;
+        o->steer_left_rad=o->raw_steer_left_rad=o->tape_entry_phase==1 ? 0.0f :
+            -c->tape_entry_right_deg*0.01745329252f;
+        o->correction_right_rad=-o->steer_left_rad;
+        c->tape_entry_last_steer_rad=o->steer_left_rad;
+    }
+    o->tape_state=c->tape_state;
+    return 1;
+}
+
 static uint8_t TapeWait(TrackingController *c,const VisionTarget *v,uint32_t now,
                        float measured,const TrackingParameters *p,TrackingOutput *o)
 {
@@ -232,6 +358,7 @@ static uint8_t TapeWait(TrackingController *c,const VisionTarget *v,uint32_t now
     c->route_speed_mps=0;
     if(c->tape_state==TAPE_FINISH) return 1;
     if(c->tape_state==TAPE_FAULT) {
+        if(TapeLaneEntry(c)) return 0;
         if(v->valid && v->link_alive &&
            (uint32_t)(now-v->received_ms)<TRACK_TAPE_GAP_MAX_MS &&
            (int32_t)(v->received_ms-c->tape_reliable_ms)>0) {
@@ -246,8 +373,9 @@ static uint8_t TapeWait(TrackingController *c,const VisionTarget *v,uint32_t now
     o->tape_wait_remaining_s=c->tape_dwell_started ?
         fmaxf(p->tape_wait_s-(uint32_t)(now-c->tape_stop_ms)*0.001f,0) : p->tape_wait_s;
     if(c->tape_dwell_started && o->tape_wait_remaining_s<=0) {
-        if(c->tape_lane_switch && (c->tape_count==1U || c->tape_count==3U)) {
-            c->tape_lane_event=1;c->tape_skip_recover=1;
+        if(TapeLaneEntry(c)) {
+            c->tape_lane_event=1;
+            TapeEntryBegin(c,p);
         }
         c->tape_state=TAPE_RECOVER;c->tape_recover_ms=now;
         c->tape_reliable_ms=v->received_ms;c->tape_reliable_count=0;
@@ -265,16 +393,12 @@ static uint8_t TapeRecover(TrackingController *c, const VisionTarget *v,
 {
     uint8_t reliable;
     float elapsed, minimum, duration;
-    /* Preserve first/third-tape departure; only the event trigger changes. */
-    if(c->tape_lane_switch && (c->tape_count==1U || c->tape_count==3U))
-        c->tape_skip_recover=1;
+    if(c->tape_state!=TAPE_RECOVER || TapeLaneEntry(c)) return 0;
     minimum=(!c->tape_skip_recover && (c->tape_count==1U || c->tape_count==3U)) ? 1.0f : 0.0f;
     duration=fmaxf(p->tape_recover_time_s,minimum);
     elapsed=(uint32_t)(now-c->tape_recover_ms)*0.001f;
-    if(c->tape_state!=TAPE_RECOVER) return 0;
     reliable=v->valid && (uint32_t)(now-v->received_ms)<TRACK_TAPE_GAP_MAX_MS;
-    if(c->tape_skip_recover && reliable &&
-       (!c->tape_lane_switch || (int32_t)(v->received_ms-c->tape_recover_ms)>0)) {
+    if(c->tape_skip_recover && reliable) {
         c->tape_state=TAPE_PASS;c->launch_complete=0;
         return 0;
     }
@@ -299,7 +423,7 @@ static uint8_t TapeRecover(TrackingController *c, const VisionTarget *v,
         o->speed_mps=o->requested_speed_mps=c->tape_skip_recover ?
             fminf(p->hold_speed_mps,p->speed_mps) : p->tape_recover_speed_mps;
         o->steer_left_rad=o->raw_steer_left_rad=c->tape_skip_recover ?
-            ((c->tape_lane_switch && c->tape_count==3U) ? -0.0523598776f : 0.0f) :
+            0.0f :
             p->tape_recover_angle_deg*0.01745329252f;
         o->correction_right_rad=-o->steer_left_rad;
         c->route_speed_mps=o->speed_mps;
@@ -321,6 +445,7 @@ uint8_t Tracking_UpdateRoute(TrackingController *controller,
         controller->local_heading_rad=0.0f;
     TapeLimit(controller,latest,now,measured_speed,p,out);
     if (TapeWait(controller,latest,now,measured_speed,p,out)) return 1U;
+    if (TapeEntry(controller,latest,now,p,out)) return 1U;
     if (TapeRecover(controller,latest,now,p,out)) return 1U;
     if (!control->valid || !control->link_alive ||
         (uint32_t)(now-control->received_ms) >= VISION_TARGET_HOLD_MS ||
@@ -400,7 +525,14 @@ uint8_t Tracking_UpdateRoute(TrackingController *controller,
     } else controller->local_heading_rad=0.0f;
     out->heading_rad=controller->local_heading_rad;
     out->raw_steer_left_rad+=out->heading_rad;
+    if(controller->tape_entry_blending) {
+        float blend=Ack_Clamp((uint32_t)(now-controller->tape_entry_blend_ms)/200.0f,0.0f,1.0f);
+        out->raw_steer_left_rad=controller->tape_entry_blend_from_rad+
+            blend*(out->raw_steer_left_rad-controller->tape_entry_blend_from_rad);
+        if(blend>=1.0f) controller->tape_entry_blending=0;
+    }
     out->steer_left_rad=Ack_Clamp(out->raw_steer_left_rad,-ACK_MAX_STEER_RAD,ACK_MAX_STEER_RAD);
+    if(controller->tape_entry_active) controller->tape_entry_last_steer_rad=out->steer_left_rad;
     out->control_x_m = out->error_m = x;
     out->control_y_m = y;
     out->correction_right_rad = -out->steer_left_rad;

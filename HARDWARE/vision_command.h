@@ -64,6 +64,9 @@ uint16_t Vision_Crc16(const uint8_t *data, uint16_t length);
 uint8_t Vision_CanRun(const VisionCommand *cmd, uint32_t now);
 /* MCU -> Jetson v1.9: returns 9 bytes, or 0 for invalid arguments. */
 void Vision_RequestLane(uint8_t mode);
+/* Local successful UART TX observation; this is not a remote acknowledgement. */
+void Vision_OnLaneSent(uint8_t mode, uint32_t now);
+uint8_t Vision_LaneAutoRestored(uint32_t requested_ms, uint32_t frame_ms);
 uint8_t Vision_TakeLaneCommand(uint8_t out[9]);
 uint8_t Vision_BuildLaneCommand(uint8_t out[9], uint16_t sequence, uint8_t mode);
 #endif
