@@ -40,7 +40,7 @@ enum { TRACK_ROUTE_OFF, TRACK_ROUTE_NORMAL, TRACK_ROUTE_SINGLE,
 #define TRACK_REASON_SATURATED  0x10U
 
 enum { TAPE_SEARCH, TAPE_CONFIRM, TAPE_APPROACH, TAPE_BRAKE,
-       TAPE_WAIT, TAPE_PASS, TAPE_FAULT, TAPE_RECOVER, TAPE_FINISH };
+       TAPE_WAIT, TAPE_PASS, TAPE_FAULT, TAPE_RECOVER, TAPE_FINISH, TAPE_FINISH_BLIND };
 typedef struct {
     float error_m, derivative_mps, measured_speed_mps, denominator_mps;
     float p_rad, d_rad, stanley_rad, heading_rad;
@@ -71,6 +71,7 @@ typedef struct {
     float tape_finish_gap_cm;
     float finish_approach_speed_mps;
     float local_heading_gain, local_heading_limit_deg;
+    float finish_blind_speed_mps, finish_blind_time_s;
 } TrackingParameters;
 /* 100 Hz M3: V4 route-aware speeds; V3 retains the legacy X speed rule. */
 uint8_t Tracking_UpdateRoute(TrackingController *controller,

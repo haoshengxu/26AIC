@@ -390,9 +390,13 @@ void test_entry(void)
             }
         }
         REQUIRE(c.tape_count==4 && c.tape_state!=TAPE_FINISH);
-        p.tape_finish_gap_cm=20;p.tape_gap_cm=5;
+        p.tape_finish_gap_cm=20;p.tape_gap_cm=5; c.tape_distance_m=TRACK_REAR_TO_FRONT_M+0.210f; c.route_speed_mps=0.40f; c.launch_complete=1; v.tape_detected=0; v.received_ms=t; REQUIRE(Tracking_UpdateRoute(&c,&v,&v,t,0,&p,&o)); REQUIRE(c.tape_state==TAPE_BRAKE && NEAR(o.speed_mps,p.finish_blind_speed_mps));
         c.tape_distance_m=TRACK_REAR_TO_FRONT_M+0.204f;
-        v.tape_detected=0;v.received_ms=t;
+        v.tape_detected=0;v.received_ms=t; REQUIRE(Tracking_UpdateRoute(&c,&v,&v,t,0,&p,&o));
+        REQUIRE(c.tape_state==TAPE_FINISH_BLIND && NEAR(o.speed_mps,p.finish_blind_speed_mps) && o.steer_left_rad==0 && o.tape_count==4);
+        memset(&v,0,sizeof(v));t+=150; REQUIRE(Tracking_UpdateRoute(&c,&v,&v,t,0,&p,&o));
+        REQUIRE(c.tape_state==TAPE_FINISH_BLIND && NEAR(o.tape_recover_remaining_s,0.15f) && NEAR(o.speed_mps,p.finish_blind_speed_mps));
+        t+=150;
         REQUIRE(Tracking_UpdateRoute(&c,&v,&v,t,0,&p,&o));
         REQUIRE(c.tape_state==TAPE_FINISH && o.speed_mps==0 && o.tape_count==4);
         memset(&v,0,sizeof(v));t+=5000;
@@ -510,6 +514,13 @@ void test_entry(void)
             REQUIRE(Tracking_UpdateRoute(&c,&v,&v,2010,0,&p,&o));
             REQUIRE(c.tape_state==TAPE_PASS);
         }
+        /* M5 never requests a lane change, including its second tape. */
+        Tracking_Reset(&c,&o);memset(&v,0,sizeof(v));
+        c.tape_state=TAPE_WAIT;c.tape_count=2;c.tape_skip_recover=1;
+        REQUIRE(Tracking_UpdateRoute(&c,&v,&v,3000,0,&p,&o));
+        REQUIRE(Tracking_UpdateRoute(&c,&v,&v,4000,0,&p,&o));
+        REQUIRE(c.tape_state==TAPE_RECOVER && !c.tape_lane_event);
+
     }
     {
         TrackingController c;TrackingOutput o;TrackingParameters p;VisionTarget v;
@@ -531,6 +542,8 @@ void test_entry(void)
         TrackingParameters p;Tracking_GetParameters(&p);
         REQUIRE(p.tape_gap_cm==7.0f && p.tape_finish_gap_cm==0.0f && p.finish_approach_speed_mps==1.0f && NEAR(p.tape_wait_s,0.30f));
         REQUIRE(Tracking_SetParameter("TFDIST",0.0f) && Tracking_SetParameter("TTWAIT",0.30f) && !Tracking_SetParameter("TTWAIT",0.09f));
+        REQUIRE(p.finish_blind_speed_mps==0.25f && NEAR(p.finish_blind_time_s,0.30f));
+        REQUIRE(Tracking_SetParameter("TFBV",0.35f) && Tracking_SetParameter("TFBT",0.45f) && !Tracking_SetParameter("TFBV",-0.1f) && !Tracking_SetParameter("TFBT",5.1f));
         REQUIRE(!Tracking_SetParameter("TFDIST",-0.1f));
     }
     {

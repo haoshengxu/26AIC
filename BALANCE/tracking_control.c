@@ -17,7 +17,7 @@ static TrackingParameters parameters = {TRACK_BASE_SPEED_MPS, TRACK_KP,
     TRACK_HOLD_SPEED_MPS, TRACK_SAT_SPEED_MPS, TRACK_ACCEL_MPS2, TRACK_DECEL_MPS2,
     TRACK_PP_STRAIGHT_GAIN, TRACK_GAIN_CURVE_ENTER, TRACK_GAIN_CURVE_EXIT,
     TRACK_START_ACCEL_MPS2, TRACK_TAPE_DECEL_MPS2, TRACK_TAPE_GAP_CM, TRACK_TAPE_WAIT_S,
-    10.0f, TRACK_TAPE_RECOVER_SPEED, TRACK_TAPE_RECOVER_MS*0.001f, TRACK_TAPE_FINISH_GAP_CM, TRACK_FINISH_APPROACH_SPEED, 0.0f, 3.0f};
+    10.0f, TRACK_TAPE_RECOVER_SPEED, TRACK_TAPE_RECOVER_MS*0.001f, TRACK_TAPE_FINISH_GAP_CM, TRACK_FINISH_APPROACH_SPEED, 0.0f, 3.0f, TRACK_FINISH_BLIND_SPEED_MPS, TRACK_FINISH_BLIND_TIME_S};
 
 void Tracking_DefaultParameters(void)
 {
@@ -49,6 +49,8 @@ void Tracking_DefaultParameters(void)
     parameters.tape_gap_cm = TRACK_TAPE_GAP_CM;
     parameters.tape_finish_gap_cm=TRACK_TAPE_FINISH_GAP_CM;
     parameters.finish_approach_speed_mps=TRACK_FINISH_APPROACH_SPEED;
+    parameters.finish_blind_speed_mps=TRACK_FINISH_BLIND_SPEED_MPS;
+    parameters.finish_blind_time_s=TRACK_FINISH_BLIND_TIME_S;
     parameters.tape_wait_s = TRACK_TAPE_WAIT_S;
     parameters.tape_recover_angle_deg=10.0f;
     parameters.tape_recover_speed_mps=TRACK_TAPE_RECOVER_SPEED;
@@ -71,6 +73,10 @@ uint8_t Tracking_SetParameter(const char *key, float value)
         parameters.local_heading_limit_deg=value;
     else if (!strcmp(key,"TFV") && value >= 0.05f && value <= ACK_MAX_WHEEL_SPEED_MPS)
         parameters.finish_approach_speed_mps=value;
+    else if (!strcmp(key,"TFBV") && value >= 0.0f && value <= ACK_MAX_WHEEL_SPEED_MPS)
+        parameters.finish_blind_speed_mps=value;
+    else if (!strcmp(key,"TFBT") && value >= 0.0f && value <= 5.0f)
+        parameters.finish_blind_time_s=value;
     else if (!strcmp(key,"TFDIST") && value >= 0.0f && value <= 100.0f)
         parameters.tape_finish_gap_cm=value;
     else if (!strcmp(key,"TBA") && value >= -20.0f && value <= 20.0f)
@@ -196,10 +202,13 @@ static void TapeLimit(TrackingController *c, const VisionTarget *v, uint32_t now
         a=p->tape_decel_mps2;delay=TRACK_TAPE_DELAY_S;
         /* Solve v*delay + v*v/(2*a) <= remaining. */
         o->tape_speed_limit=sqrtf(a*a*delay*delay+2*a*fmaxf(remaining,0))-a*delay;
+        if(c->tape_count>=4U && p->finish_blind_time_s>0.0f && p->finish_blind_speed_mps>0.0f)
+            o->tape_speed_limit=fmaxf(o->tape_speed_limit,p->finish_blind_speed_mps);
         speed=fmaxf(c->route_speed_mps,fmaxf(measured,0));
         c->tape_state=remaining<=speed*delay+speed*speed/(2*a) ? TAPE_BRAKE : TAPE_APPROACH;
         if(remaining<=TRACK_TAPE_STOP_TOLERANCE_M) {
-            c->tape_state=c->tape_count>=4U ? TAPE_FINISH : TAPE_WAIT;c->tape_dwell_started=0;c->route_speed_mps=0;
+            if(c->tape_count>=4U && p->finish_blind_time_s>0.0f && p->finish_blind_speed_mps>0.0f) { c->tape_state=TAPE_FINISH_BLIND;c->tape_recover_ms=now; }
+            else { c->tape_state=c->tape_count>=4U ? TAPE_FINISH : TAPE_WAIT;c->tape_dwell_started=0;c->route_speed_mps=0; }
         }
     }
     o->tape_front_cm=(c->tape_distance_m-TRACK_REAR_TO_FRONT_M)*100.0f;
@@ -210,6 +219,13 @@ static void TapeLimit(TrackingController *c, const VisionTarget *v, uint32_t now
 static uint8_t TapeWait(TrackingController *c,const VisionTarget *v,uint32_t now,
                        float measured,const TrackingParameters *p,TrackingOutput *o)
 {
+    if(c->tape_state==TAPE_FINISH_BLIND) {
+        float elapsed=(uint32_t)(now-c->tape_recover_ms)*0.001f;
+        o->valid=1;o->tape_front_cm=(c->tape_distance_m-TRACK_REAR_TO_FRONT_M)*100.0f;
+        if(elapsed>=p->finish_blind_time_s || p->finish_blind_speed_mps<=0.0f) { c->tape_state=TAPE_FINISH;c->route_speed_mps=0; }
+        else { o->speed_mps=o->requested_speed_mps=c->route_speed_mps=p->finish_blind_speed_mps;o->tape_recover_remaining_s=p->finish_blind_time_s-elapsed; }
+        o->tape_state=c->tape_state;return 1;
+    }
     if(c->tape_state!=TAPE_WAIT && c->tape_state!=TAPE_FAULT && c->tape_state!=TAPE_FINISH) return 0;
     o->valid=1;o->tape_state=c->tape_state;
     o->tape_front_cm=(c->tape_distance_m-TRACK_REAR_TO_FRONT_M)*100.0f;
@@ -249,6 +265,7 @@ static uint8_t TapeRecover(TrackingController *c, const VisionTarget *v,
 {
     uint8_t reliable;
     float elapsed, minimum, duration;
+    /* Preserve first/third-tape departure; only the event trigger changes. */
     if(c->tape_lane_switch && (c->tape_count==1U || c->tape_count==3U))
         c->tape_skip_recover=1;
     minimum=(!c->tape_skip_recover && (c->tape_count==1U || c->tape_count==3U)) ? 1.0f : 0.0f;
