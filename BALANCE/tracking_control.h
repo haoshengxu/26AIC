@@ -27,7 +27,7 @@ typedef struct {
     uint32_t tape_seen_count, tape_first_ms, tape_last_ms, tape_stop_ms, tape_clear_ms;
     uint32_t tape_recover_ms, tape_reliable_ms, tape_reliable_count;
     uint8_t tape_entry_active, tape_entry_visual;
-    float tape_entry_straight_s, tape_entry_right_deg, tape_entry_speed_mps, tape_entry_max_s;
+    float tape_entry_straight_s, tape_entry_right_deg, tape_entry_speed_mps, tape_entry_min_s, tape_entry_max_s;
     uint8_t tape_entry_blending;
     uint32_t tape_entry_blend_ms;
     float tape_entry_last_steer_rad, tape_entry_blend_from_rad;
@@ -79,8 +79,8 @@ typedef struct {
     float finish_approach_speed_mps;
     float local_heading_gain, local_heading_limit_deg;
     float finish_blind_speed_mps, finish_blind_time_s;
-    float tape1_straight_s, tape1_right_deg, tape1_speed_mps, tape1_max_s;
-    float tape3_straight_s, tape3_right_deg, tape3_speed_mps, tape3_max_s;
+    float tape1_straight_s, tape1_right_deg, tape1_speed_mps, tape1_min_s, tape1_max_s;
+    float tape3_straight_s, tape3_right_deg, tape3_speed_mps, tape3_min_s, tape3_max_s;
 } TrackingParameters;
 /* 100 Hz M3: V4 route-aware speeds; V3 retains the legacy X speed rule. */
 uint8_t Tracking_UpdateRoute(TrackingController *controller,

@@ -18,8 +18,8 @@ static TrackingParameters parameters = {TRACK_BASE_SPEED_MPS, TRACK_KP,
     TRACK_PP_STRAIGHT_GAIN, TRACK_GAIN_CURVE_ENTER, TRACK_GAIN_CURVE_EXIT,
     TRACK_START_ACCEL_MPS2, TRACK_TAPE_DECEL_MPS2, TRACK_TAPE_GAP_CM, TRACK_TAPE_WAIT_S,
     10.0f, TRACK_TAPE_RECOVER_SPEED, TRACK_TAPE_RECOVER_MS*0.001f, TRACK_TAPE_FINISH_GAP_CM, TRACK_FINISH_APPROACH_SPEED, 0.0f, 3.0f, TRACK_FINISH_BLIND_SPEED_MPS, TRACK_FINISH_BLIND_TIME_S,
-    TRACK_TAPE1_STRAIGHT_S, TRACK_TAPE1_RIGHT_DEG, TRACK_TAPE1_SPEED_MPS, TRACK_TAPE1_MAX_S,
-    TRACK_TAPE3_STRAIGHT_S, TRACK_TAPE3_RIGHT_DEG, TRACK_TAPE3_SPEED_MPS, TRACK_TAPE3_MAX_S};
+    TRACK_TAPE1_STRAIGHT_S, TRACK_TAPE1_RIGHT_DEG, TRACK_TAPE1_SPEED_MPS, TRACK_TAPE1_MIN_S, TRACK_TAPE1_MAX_S,
+    TRACK_TAPE3_STRAIGHT_S, TRACK_TAPE3_RIGHT_DEG, TRACK_TAPE3_SPEED_MPS, TRACK_TAPE3_MIN_S, TRACK_TAPE3_MAX_S};
 
 void Tracking_DefaultParameters(void)
 {
@@ -60,10 +60,12 @@ void Tracking_DefaultParameters(void)
     parameters.tape1_straight_s = TRACK_TAPE1_STRAIGHT_S;
     parameters.tape1_right_deg = TRACK_TAPE1_RIGHT_DEG;
     parameters.tape1_speed_mps = TRACK_TAPE1_SPEED_MPS;
+    parameters.tape1_min_s = TRACK_TAPE1_MIN_S;
     parameters.tape1_max_s = TRACK_TAPE1_MAX_S;
     parameters.tape3_straight_s = TRACK_TAPE3_STRAIGHT_S;
     parameters.tape3_right_deg = TRACK_TAPE3_RIGHT_DEG;
     parameters.tape3_speed_mps = TRACK_TAPE3_SPEED_MPS;
+    parameters.tape3_min_s = TRACK_TAPE3_MIN_S;
     parameters.tape3_max_s = TRACK_TAPE3_MAX_S;
 }
 
@@ -89,6 +91,10 @@ uint8_t Tracking_SetParameter(const char *key, float value)
         parameters.tape1_speed_mps=value;
     else if (!strcmp(key,"T3BV") && value >= 0.05f && value <= ACK_MAX_WHEEL_SPEED_MPS)
         parameters.tape3_speed_mps=value;
+    else if (!strcmp(key,"T1BMIN") && value >= 0.0f && value <= 5.0f)
+        parameters.tape1_min_s=value;
+    else if (!strcmp(key,"T3BMIN") && value >= 0.0f && value <= 5.0f)
+        parameters.tape3_min_s=value;
     else if (!strcmp(key,"T1BMAX") && value >= 0.1f && value <= 5.0f)
         parameters.tape1_max_s=value;
     else if (!strcmp(key,"T3BMAX") && value >= 0.1f && value <= 5.0f)
@@ -256,6 +262,7 @@ static void TapeEntryBegin(TrackingController *c,const TrackingParameters *p)
     c->tape_entry_straight_s=first ? p->tape1_straight_s : p->tape3_straight_s;
     c->tape_entry_right_deg=first ? p->tape1_right_deg : p->tape3_right_deg;
     c->tape_entry_speed_mps=first ? p->tape1_speed_mps : p->tape3_speed_mps;
+    c->tape_entry_min_s=first ? p->tape1_min_s : p->tape3_min_s;
     c->tape_entry_max_s=first ? p->tape1_max_s : p->tape3_max_s;
 }
 
@@ -311,6 +318,7 @@ static uint8_t TapeEntry(TrackingController *c,const VisionTarget *v,uint32_t no
         c->tape_reliable_ms=v->received_ms;
         c->tape_state=TAPE_RECOVER;c->local_heading_rad=0.0f;
         c->tape_entry_blending=0;
+        c->tape_entry_right_deg=-c->tape_entry_last_steer_rad*57.2957795f;
     }
     TapeEntryCount(c,v,reliable);
     /* At the deadline, stop first. A later group of frames may resume vision. */
@@ -318,7 +326,7 @@ static uint8_t TapeEntry(TrackingController *c,const VisionTarget *v,uint32_t no
         c->tape_state=TAPE_FAULT;c->tape_reliable_count=0;
         c->tape_reliable_ms=now;
     }
-    if(c->tape_reliable_count>=3U && elapsed>=c->tape_entry_straight_s) {
+    if(c->tape_reliable_count>=3U && elapsed>=fmaxf(c->tape_entry_straight_s,c->tape_entry_min_s)) {
         c->tape_state=TAPE_PASS;c->launch_complete=0;c->tape_entry_visual=1;
         c->tape_entry_blending=1;c->tape_entry_blend_ms=now;
         c->tape_entry_blend_from_rad=c->tape_entry_last_steer_rad;
