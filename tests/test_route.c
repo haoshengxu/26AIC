@@ -41,6 +41,8 @@ static void start_route_fixture(void)
     ModeControl_DebugCommand("TSTART",0.30f);
     ModeControl_DebugCommand("TGEN",0.82f);
     ModeControl_DebugCommand("TGEX",0.60f); ModeControl_DebugCommand("TTWAIT",1.0f);
+    ModeControl_DebugCommand("TEDIST",10000.0f); /* Keep the route fixture outside the new zone. */
+    ModeControl_DebugCommand("TE3S",10000.0f);
 }
 static void tape_frame_mode(uint16_t cm100,uint8_t detected,uint8_t mode)
 {
@@ -164,8 +166,10 @@ void test_entry(void)
     route_frame(0,4500,7,1,0);advance(10);ModeControl_GetTrackingOutput(&out);
     REQUIRE(NEAR(out.speed_mps,0.003f));
     REQUIRE(ModeControl_DebugCommand("TRESET",1));Tracking_GetParameters(&p);
-    REQUIRE(p.pp_gain==1.40f && p.curve_threshold==0.82f && p.curve_speed_gain==0.16f);
-    REQUIRE(p.fallback_speed_mps==0.40f && p.hold_speed_mps==0.40f && p.accel_mps2==0.430f);
+    REQUIRE(p.pp_gain==1.39f && p.curve_threshold==0.76f && p.curve_speed_gain==0.16f);
+    REQUIRE(p.fallback_speed_mps==0.30f && p.hold_speed_mps==0.40f && p.accel_mps2==0.395f);
+    REQUIRE(p.speed_mps==0.91f && p.turn_min_speed_mps==0.60f && p.unknown_speed_mps==0.50f);
+    REQUIRE(p.decel_mps2==1.60f && p.start_accel_mps2==0.43f);
     Vision_UartError();advance(10);REQUIRE(!ModeControl_IsActive() && MOTOR_A.Target==0);
     case_id=10;start_route_fixture();
     REQUIRE(ModeControl_DebugCommand("TPGS",0.8f));
@@ -211,7 +215,7 @@ void test_entry(void)
     REQUIRE(ModeControl_DebugCommand("TPG",1.1f));Tracking_GetParameters(&p);
     REQUIRE(p.pp_gain==1.1f && p.pp_straight_gain==1.1f);
     REQUIRE(ModeControl_DebugCommand("TRESET",1));Tracking_GetParameters(&p);
-    REQUIRE(p.pp_gain==1.40f && p.pp_straight_gain==0.95f);
+    REQUIRE(p.pp_gain==1.39f && p.pp_straight_gain==0.87f);
     REQUIRE(p.gain_curve_enter==0.82f && p.gain_curve_exit==0.31f);
     case_id=11;start_route_fixture();
     REQUIRE(ModeControl_DebugCommand("TSTART",0.5f));
@@ -240,7 +244,7 @@ void test_entry(void)
     route_run(30,0,0,6,1,0);ModeControl_GetTrackingOutput(&out);
     REQUIRE(out.startup_active && out.speed_mps<=speed); /* hold cannot complete launch */
     REQUIRE(ModeControl_DebugCommand("TRESET",1));Tracking_GetParameters(&p);
-    REQUIRE(p.start_accel_mps2==0.80f && p.accel_mps2==0.430f);
+    REQUIRE(p.start_accel_mps2==0.43f && p.accel_mps2==0.395f);
     case_id=12;start_route_fixture();
     {
         uint8_t v[25]; uint16_t crc;
@@ -261,6 +265,9 @@ void test_entry(void)
     case_id=13;start_route_fixture();
     {
         unsigned int j;
+        /* This handover/loss scenario intentionally spans a two-second window. */
+        REQUIRE(ModeControl_DebugCommand("T1BMAX",2.0f));
+        REQUIRE(ModeControl_DebugCommand("T1BMIN",0.90f));
         REQUIRE(ModeControl_DebugCommand("TTDEC",2));
         REQUIRE(ModeControl_DebugCommand("TTDIST",100));
         left_count=(int)(0.4f*Encoder_precision/(Wheel_perimeter*100));right_count=-left_count;
@@ -402,6 +409,7 @@ void test_entry(void)
             }
         }
         REQUIRE(c.tape_count==4 && c.tape_state!=TAPE_FINISH);
+        p.finish_blind_time_s=0.30f; /* Explicit opt-in coverage of legacy finish crawl. */
         p.tape_finish_gap_cm=20;p.tape_gap_cm=5; c.tape_distance_m=TRACK_REAR_TO_FRONT_M+0.210f; c.route_speed_mps=0.40f; c.launch_complete=1; v.tape_detected=0; v.received_ms=t; REQUIRE(Tracking_UpdateRoute(&c,&v,&v,t,0,&p,&o)); REQUIRE(c.tape_state==TAPE_BRAKE && NEAR(o.speed_mps,p.finish_blind_speed_mps));
         c.tape_distance_m=TRACK_REAR_TO_FRONT_M+0.204f;
         v.tape_detected=0;v.received_ms=t; REQUIRE(Tracking_UpdateRoute(&c,&v,&v,t,0,&p,&o));
@@ -513,9 +521,10 @@ void test_entry(void)
         uint8_t n;
         for(n=1;n<=3;n+=2) {
             Tracking_Reset(&c,&o);Tracking_DefaultParameters();Tracking_GetParameters(&p);
-            REQUIRE(NEAR(p.tape1_straight_s,0.0f) && NEAR(p.tape1_right_deg,10.2f) && NEAR(p.tape1_speed_mps,0.58f) && NEAR(p.tape1_min_s,0.90f) && NEAR(p.tape1_max_s,2.0f));
-            REQUIRE(NEAR(p.tape3_straight_s,0.60f) && NEAR(p.tape3_right_deg,15.2f) && NEAR(p.tape3_speed_mps,0.32f) && NEAR(p.tape3_min_s,1.40f) && NEAR(p.tape3_max_s,2.80f));
+            REQUIRE(NEAR(p.tape1_straight_s,0.0f) && NEAR(p.tape1_right_deg,8.9f) && NEAR(p.tape1_speed_mps,0.58f) && NEAR(p.tape1_min_s,0.57f) && NEAR(p.tape1_max_s,1.0f));
+            REQUIRE(NEAR(p.tape3_straight_s,0.60f) && NEAR(p.tape3_right_deg,15.2f) && NEAR(p.tape3_speed_mps,0.51f) && NEAR(p.tape3_min_s,1.00f) && NEAR(p.tape3_max_s,2.80f));
             p.tape1_straight_s=p.tape3_straight_s=0.30f;
+            p.tape1_straight_cm=p.tape3_straight_cm=8.4f;
             p.tape1_right_deg=p.tape3_right_deg=10.0f;
             p.tape1_speed_mps=p.tape3_speed_mps=0.28f;
             p.tape1_min_s=p.tape3_min_s=0.30f;
@@ -530,6 +539,7 @@ void test_entry(void)
             REQUIRE(o.steer_left_rad==0 && o.tape_entry_phase==1);
             v.valid=v.link_alive=1;v.version=5;v.mode=1;v.y_centi_cm=5000;v.received_ms=2005; REQUIRE(Tracking_UpdateRoute(&c,&v,&v,2005,0,&p,&o) && c.tape_state==TAPE_RECOVER && o.tape_recover_remaining_s>0.9f); v.mode=3;v.received_ms=2010; REQUIRE(Tracking_UpdateRoute(&c,&v,&v,2010,0,&p,&o) && c.tape_state==TAPE_RECOVER); v.received_ms=2020; REQUIRE(Tracking_UpdateRoute(&c,&v,&v,2020,0,&p,&o) && c.tape_state==TAPE_RECOVER); v.received_ms=2030; REQUIRE(Tracking_UpdateRoute(&c,&v,&v,2030,0,&p,&o));
             REQUIRE(c.tape_state==TAPE_RECOVER); /* Straight phase is mandatory. */
+            Tracking_AdvanceOdometry(&c,0.085f);
             v.received_ms=2300;REQUIRE(Tracking_UpdateRoute(&c,&v,&v,2300,0,&p,&o));
             REQUIRE(o.tape_entry_phase==2 && NEAR(o.steer_left_rad,-10*0.01745329252f));
             v.received_ms=2310;REQUIRE(Tracking_UpdateRoute(&c,&v,&v,2310,0,&p,&o));
@@ -565,6 +575,7 @@ void test_entry(void)
         Tracking_DefaultParameters();Tracking_GetParameters(&p);
         p.tape1_straight_s=0.2f;p.tape1_right_deg=8;p.tape1_speed_mps=0.21f;p.tape1_min_s=0.2f;p.tape1_max_s=3;
         p.tape3_straight_s=0.4f;p.tape3_right_deg=12;p.tape3_speed_mps=0.31f;p.tape3_min_s=0.4f;p.tape3_max_s=4;
+        p.tape1_straight_cm=4.2f;p.tape3_straight_cm=12.4f;
         for(n=1;n<=3;n+=2) {
             float angle=(n==1 ? -8.0f : -12.0f)*0.01745329252f;
             float speed=n==1 ? 0.21f : 0.31f;
@@ -577,6 +588,7 @@ void test_entry(void)
             REQUIRE(o.tape_entry_phase==1 && o.steer_left_rad==0 && NEAR(o.speed_mps,speed));
             if(n==1) {p.tape1_max_s=0.1f;p.tape1_straight_s=0;p.tape1_right_deg=20;p.tape1_speed_mps=0.8f;}
             straight_end=start+(n==1 ? 200 : 400);
+            Tracking_AdvanceOdometry(&c,n==1 ? 0.0421f : 0.1241f);
             REQUIRE(Tracking_UpdateRoute(&c,&v,&v,straight_end,0,&p,&o));
             REQUIRE(o.tape_entry_phase==2 && NEAR(o.steer_left_rad,angle));
             v.valid=v.link_alive=1;v.version=5;v.mode=3;v.y_centi_cm=5000;
@@ -625,7 +637,8 @@ void test_entry(void)
             REQUIRE(c.tape_state==TAPE_PASS && !c.tape_entry_active && o.speed_mps>0);
             start+=10000;
         }
-        /* Minimum blind duration (T1BMIN > T1BT) delays takeover while turning right. */
+        /* Minimum total duration delays takeover even when straight distance is zero. */
+        p.tape1_straight_cm=0;
         p.tape1_straight_s=0.1f;p.tape1_min_s=0.5f;p.tape1_right_deg=10.0f;p.tape1_speed_mps=0.30f;p.tape1_max_s=3.0f;
         Tracking_Reset(&c,&o);memset(&v,0,sizeof(v));
         c.tape_count=1;c.tape_lane_switch=1;c.tape_state=TAPE_RECOVER;c.tape_recover_ms=start;
@@ -664,11 +677,59 @@ void test_entry(void)
     Tracking_DefaultParameters();
     {
         TrackingParameters p;Tracking_GetParameters(&p);
-        REQUIRE(p.tape_gap_cm==7.0f && p.tape_finish_gap_cm==0.0f && p.finish_approach_speed_mps==1.0f && NEAR(p.tape_wait_s,0.30f));
+        REQUIRE(p.tape_gap_cm==7.0f && p.tape_finish_gap_cm==9.0f && p.tape_finish_gap_m5_cm==2.0f && p.finish_approach_speed_mps==0.56f && NEAR(p.tape_wait_s,0.30f));
         REQUIRE(Tracking_SetParameter("TFDIST",0.0f) && Tracking_SetParameter("TTWAIT",0.30f) && !Tracking_SetParameter("TTWAIT",0.09f));
-        REQUIRE(p.finish_blind_speed_mps==0.25f && NEAR(p.finish_blind_time_s,0.30f));
+        REQUIRE(p.finish_blind_speed_mps==0.25f && NEAR(p.finish_blind_time_s,0.0f));
         REQUIRE(Tracking_SetParameter("TFBV",0.35f) && Tracking_SetParameter("TFBT",0.45f) && !Tracking_SetParameter("TFBV",-0.1f) && !Tracking_SetParameter("TFBT",5.1f));
         REQUIRE(!Tracking_SetParameter("TFDIST",-0.1f));
+    }
+    {
+        TrackingController c;TrackingOutput o;TrackingParameters p;VisionTarget v;
+        unsigned mode,n;
+        REQUIRE(Tracking_SetParameter("TFDIST3",5) && Tracking_SetParameter("TFDIST5",15));
+        Tracking_GetParameters(&p);
+        REQUIRE(p.tape_finish_gap_cm==5 && p.tape_finish_gap_m5_cm==15);
+        REQUIRE(Tracking_SetParameter("TFDIST",10));Tracking_GetParameters(&p);
+        REQUIRE(p.tape_finish_gap_cm==10 && p.tape_finish_gap_m5_cm==15);
+        REQUIRE(!Tracking_SetParameter("TFDIST3",-0.1f) && !Tracking_SetParameter("TFDIST5",-0.1f));
+        REQUIRE(!Tracking_SetParameter("TFDIST3",100.1f) && !Tracking_SetParameter("TFDIST5",100.1f));
+        REQUIRE(Tracking_SetParameter("TFDIST3",100) && Tracking_SetParameter("TFDIST5",100));
+        REQUIRE(Tracking_SetParameter("TFDIST3",0) && Tracking_SetParameter("TFDIST5",0));
+        Tracking_GetParameters(&p);REQUIRE(p.tape_finish_gap_cm==0 && p.tape_finish_gap_m5_cm==0);
+        REQUIRE(Tracking_SetParameter("TFDIST3",10) && Tracking_SetParameter("TFDIST5",15));
+        Tracking_GetParameters(&p);
+        memset(&v,0,sizeof(v));v.valid=v.link_alive=1;v.version=5;v.mode=1;
+        v.y_centi_cm=5000;v.received_ms=1000;
+        for(mode=0;mode<2;mode++) {
+            Tracking_Reset(&c,&o);c.finish_approach_limit=mode;
+            c.tape_count=4;c.tape_state=TAPE_APPROACH;
+            c.tape_distance_m=TRACK_REAR_TO_FRONT_M+0.12f;
+            c.launch_complete=1;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1000,0,&p,&o));
+            if(mode) REQUIRE(c.tape_state==TAPE_FINISH_BLIND);
+            else REQUIRE(c.tape_state==TAPE_APPROACH);
+            /* All first three tapes retain the shared 7cm clearance in both maps. */
+            for(n=1;n<=3;n++) {
+                Tracking_Reset(&c,&o);c.finish_approach_limit=mode;
+                c.tape_count=n;c.tape_state=TAPE_APPROACH;
+                c.tape_distance_m=TRACK_REAR_TO_FRONT_M+0.08f;c.launch_complete=1;
+                REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1000,0,&p,&o));
+                REQUIRE(c.tape_state==TAPE_APPROACH);
+            }
+        }
+        Tracking_DefaultParameters();Tracking_GetParameters(&p);
+        REQUIRE(p.tape_finish_gap_cm==9 && p.tape_finish_gap_m5_cm==2);
+        for(mode=0;mode<2;mode++) {
+            Tracking_Reset(&c,&o);c.finish_approach_limit=mode;
+            c.tape_count=4;c.tape_state=TAPE_APPROACH;
+            c.tape_distance_m=TRACK_REAR_TO_FRONT_M+0.004f;
+            v.received_ms=1000;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1000,0,&p,&o));
+            REQUIRE(c.tape_state==TAPE_FINISH && o.speed_mps==0);
+            v.received_ms=2000;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,2000,0,&p,&o));
+            REQUIRE(c.tape_state==TAPE_FINISH && o.speed_mps==0);
+        }
     }
     {
         TrackingController c;TrackingOutput o;TrackingParameters p;VisionTarget v;
@@ -714,5 +775,245 @@ void test_entry(void)
         Tracking_UpdateRoute(&c,&v,&v,1300,0.3f,&p,&o);REQUIRE(!o.heading_used && o.heading_rad==0);
     }
 
+    case_id=15; /* Signed encoder travel, distance gate, stalled wheels and fresh trips. */
+    {
+        EncoderOdometry before,after;
+        TrackingController c;TrackingOutput o;VisionTarget v;
+        uint8_t n;unsigned int i;float step;
+        reset();Balance_GetOdometry(&before);
+        left_count=600;right_count=-1200;Get_Velocity_Form_Encoder();
+        Balance_GetOdometry(&after);step=900.0f*Wheel_perimeter/Encoder_precision;
+        REQUIRE(NEAR(after.left_m-before.left_m,600*Wheel_perimeter/Encoder_precision));
+        REQUIRE(NEAR(after.right_m-before.right_m,1200*Wheel_perimeter/Encoder_precision));
+        REQUIRE(NEAR(after.delta_m,step) && NEAR(after.centre_m-before.centre_m,step));
+        REQUIRE(NEAR(after.delta_m,0.005f*(MOTOR_A.Encoder+MOTOR_B.Encoder)));
+        left_count=-600;right_count=1200;Get_Velocity_Form_Encoder();Balance_GetOdometry(&after);
+        REQUIRE(NEAR(after.centre_m,before.centre_m) && NEAR(after.delta_m,-step));
+        left_count=right_count=600;Get_Velocity_Form_Encoder();Balance_GetOdometry(&after);
+        REQUIRE(NEAR(after.delta_m,0)); /* Opposite wheel motion cancels at rear axle. */
+        before=after;left_count=right_count=0;Get_Velocity_Form_Encoder();Balance_GetOdometry(&after);
+        REQUIRE(after.delta_m==0 && after.centre_m==before.centre_m);
+        Encoder_precision=0;left_count=600;right_count=-600;
+        Get_Velocity_Form_Encoder();Balance_GetOdometry(&after);
+        REQUIRE(after.delta_m==0 && MOTOR_A.Encoder==0 && after.centre_m==before.centre_m);
+        reset();Tracking_DefaultParameters();Tracking_GetParameters(&p);
+        REQUIRE(p.tape1_straight_cm==0 && NEAR(p.tape3_straight_cm,7.0f));
+        for(n=1;n<=3;n+=2) {
+            Tracking_Reset(&c,&o);memset(&v,0,sizeof(v));
+            p.tape1_straight_cm=p.tape3_straight_cm=10;
+            p.tape1_min_s=p.tape3_min_s=0;
+            p.tape1_max_s=p.tape3_max_s=1;
+            p.tape1_straight_s=p.tape3_straight_s=0; /* Legacy zero must not skip BD. */
+            c.tape_count=n;c.tape_lane_switch=1;c.tape_state=TAPE_RECOVER;c.tape_recover_ms=1000;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1000,0,&p,&o));
+            p.tape1_straight_cm=p.tape3_straight_cm=0; /* Locked for this departure. */
+            v.valid=v.link_alive=1;v.version=5;v.mode=3;v.y_centi_cm=5000;
+            for(i=1;i<=3;i++) {
+                v.received_ms=1000+i*10;
+                REQUIRE(Tracking_UpdateRoute(&c,&v,&v,v.received_ms,0,&p,&o));
+            }
+            REQUIRE(o.tape_entry_phase==1 && c.tape_state==TAPE_RECOVER);
+            REQUIRE(NEAR(o.tape_entry_remaining_m,0.1f));
+            Tracking_AdvanceOdometry(&c,0.06f);Tracking_AdvanceOdometry(&c,-0.04f);
+            Tracking_AdvanceOdometry(&c,0.07f);v.received_ms=1100;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1100,0,&p,&o));
+            REQUIRE(o.tape_entry_phase==1 && NEAR(o.tape_entry_travel_m,0.09f));
+            REQUIRE(NEAR(o.tape_entry_remaining_m,0.01f));
+            /* A commanded speed and elapsed time do not produce encoder travel. */
+            v.received_ms=2000;REQUIRE(Tracking_UpdateRoute(&c,&v,&v,2000,0,&p,&o));
+            REQUIRE(c.tape_state==TAPE_FAULT && o.speed_mps==0);
+            for(i=1;i<=3;i++) {
+                v.received_ms=2000+i*10;
+                REQUIRE(Tracking_UpdateRoute(&c,&v,&v,v.received_ms,0,&p,&o));
+            }
+            REQUIRE(c.tape_state==TAPE_FAULT); /* Frames cannot bypass missing distance. */
+            Tracking_Reset(&c,&o);Tracking_AdvanceOdometry(&c,1.0f);
+            REQUIRE(c.tape_entry_travel_m==0 && !c.tape_entry_active);
+        }
+        /* Production encoder -> M3 tick integration, unequal wheels and reverse travel. */
+        for(n=1;n<=3;n+=2) {
+            start_route_fixture();route_run(1,0,4500,7,1,0);
+            REQUIRE(ModeControl_DebugCommand(n==1 ? "T1BD" : "T3BD",2));
+            REQUIRE(ModeControl_DebugCommand(n==1 ? "T1BMIN" : "T3BMIN",0.2f));
+            s_tracking.tape_count=n;s_tracking.tape_state=TAPE_RECOVER;
+            s_tracking.tape_recover_ms=now_ms;s_tracking.tape_reliable_ms=now_ms;
+            tape_frame_mode(0,0,3);advance(10);
+            REQUIRE(s_tracking.tape_entry_travel_m==0 && s_tracking_output.tape_entry_phase==1);
+            left_count=300;right_count=-900;step=600*Wheel_perimeter/Encoder_precision;
+            for(i=0;i<6;i++){tape_frame_mode(0,0,3);advance(10);}
+            REQUIRE(NEAR(s_tracking.tape_entry_travel_m,6*step) && s_tracking_output.tape_entry_phase==1);
+            left_count=-300;right_count=900;tape_frame_mode(0,0,3);advance(10);
+            REQUIRE(NEAR(s_tracking.tape_entry_travel_m,5*step));
+            left_count=300;right_count=-900;
+            for(i=0;i<5;i++){tape_frame_mode(0,0,3);advance(10);}
+            REQUIRE(s_tracking.tape_entry_straight_complete && s_tracking_output.tape_entry_phase==2);
+            left_count=right_count=0;
+            for(i=0;i<10;i++){tape_frame_mode(0,0,3);advance(10);}
+            REQUIRE(s_tracking.tape_state==TAPE_PASS && s_tracking_output.tape_entry_phase==3);
+            speed=s_tracking.tape_entry_travel_m;
+            route_frame(0,4500,6,3,0);advance(10);
+            REQUIRE(s_tracking_output.tape_entry_phase==2 && NEAR(s_tracking.tape_entry_travel_m,speed));
+            REQUIRE(s_tracking.tape_entry_straight_complete); /* No repeat after vision loss. */
+            REQUIRE(ModeControl_DebugCommand("RUN",0));
+            REQUIRE(!s_tracking.tape_entry_active && s_tracking.tape_entry_travel_m==0);
+        }
+    }
+    case_id=16; /* Calibration resets never alter encoder deltas or active M3 entry. */
+    {
+        EncoderOdometry before,after;TrackingController saved;TrackingOutput saved_output;
+        float target_a,target_b;int servo_before;uint32_t status_before;
+        start_route_fixture();route_run(1,0,4500,7,1,0);
+        REQUIRE(ModeControl_DebugCommand("T3BD",20));
+        s_tracking.tape_count=3;s_tracking.tape_state=TAPE_RECOVER;
+        s_tracking.tape_recover_ms=now_ms;s_tracking.tape_reliable_ms=now_ms;
+        tape_frame_mode(0,0,3);advance(10);
+        left_count=300;right_count=-900;tape_frame_mode(0,0,3);advance(10);
+        Balance_GetOdometry(&before);saved=s_tracking;saved_output=s_tracking_output;
+        target_a=MOTOR_A.Target;target_b=MOTOR_B.Target;servo_before=Servo;
+        status_before=ModeControl_GetStatus();
+        REQUIRE(ModeControl_DebugCommand("ORESET",1));Balance_GetOdometry(&after);
+        REQUIRE(after.calibration_m==0 && before.delta_m==after.delta_m);
+        REQUIRE(before.left_m==after.left_m && before.right_m==after.right_m && before.centre_m==after.centre_m);
+        REQUIRE(memcmp(&saved,&s_tracking,sizeof(saved))==0 && memcmp(&saved_output,&s_tracking_output,sizeof(saved_output))==0);
+        REQUIRE(ModeControl_GetStatus()==status_before && MOTOR_A.Target==target_a && MOTOR_B.Target==target_b && Servo==servo_before);
+        tape_frame_mode(0,0,3);advance(10);Balance_GetOdometry(&after);
+        REQUIRE(NEAR(after.calibration_m,after.delta_m));
+        REQUIRE(NEAR(s_tracking.tape_entry_travel_m,saved.tape_entry_travel_m+after.delta_m));
+        REQUIRE(ModeControl_DebugCommand("RUN",0));Balance_GetOdometry(&before);
+        REQUIRE(before.calibration_m==after.calibration_m);
+        left_count=right_count=0;advance(10);Balance_GetOdometry(&after);
+        REQUIRE(after.calibration_m==before.calibration_m && after.delta_m==0);
+        /* Subtract the origin in double precision before narrowing to telemetry float. */
+        {
+            double saved_left=s_odometry_left_m,saved_right=s_odometry_right_m;
+            double saved_origin=s_odometry_calibration_origin_m;
+            s_odometry_left_m=s_odometry_right_m=100000000.0;
+            irq_mask=1;Balance_ResetCalibrationOdometry();REQUIRE(irq_mask==1);irq_mask=0;
+            Balance_GetOdometry(&before);
+            left_count=600;right_count=-600;Get_Velocity_Form_Encoder();Balance_GetOdometry(&after);
+            REQUIRE(after.centre_m==before.centre_m && after.calibration_m>0);
+            REQUIRE(NEAR(after.calibration_m,after.delta_m));
+            s_odometry_left_m=saved_left;s_odometry_right_m=saved_right;
+            s_odometry_calibration_origin_m=saved_origin;
+        }
+    }
+    case_id=17; /* Two bounded M3 intervals, each gated by its preceding yellow. */
+    {
+        TrackingController c;TrackingOutput o;TrackingParameters p;VisionTarget v;
+        uint32_t t;uint8_t n;float start_m,end_m;uint8_t done_bit;
+        Tracking_DefaultParameters();Tracking_GetParameters(&p);
+        REQUIRE(p.exit_slow_distance_cm==178 && p.exit_slow_end_cm==239);
+        REQUIRE(p.exit_slow3_start_cm==759 && p.exit_slow3_end_cm==830);
+        REQUIRE(NEAR(p.exit_slow_speed_mps,0.30f));
+        REQUIRE(!Tracking_SetParameter("TE1S",-1) && !Tracking_SetParameter("TE1E",10000.1f));
+        REQUIRE(!Tracking_SetParameter("TE3S",-1) && !Tracking_SetParameter("TE3E",10000.1f));
+        REQUIRE(!Tracking_SetParameter("TEV",0) && !Tracking_SetParameter("TEV",1.601f));
+        {uint32_t nan_bits=0x7fc00000;float nan;memcpy(&nan,&nan_bits,4);
+         REQUIRE(!Tracking_SetParameter("TE1S",nan) && !Tracking_SetParameter("TE3E",nan));}
+        p.speed_mps=0.8f;p.decel_mps2=0.8f;
+        memset(&v,0,sizeof(v));v.valid=v.link_alive=v.endpoint_valid=v.curvature_valid=1;
+        v.version=5;v.mode=1;v.y_centi_cm=5000;v.endpoint_y_centi_cm=6000;
+        for(n=1;n<=3;n+=2) {
+            start_m=(n==1 ? p.exit_slow_distance_cm : p.exit_slow3_start_cm)*0.01f;
+            end_m=(n==1 ? p.exit_slow_end_cm : p.exit_slow3_end_cm)*0.01f;
+            done_bit=n==1 ? 1 : 2;
+            Tracking_Reset(&c,&o);c.tape_lane_switch=1;c.tape_count=n-1;
+            c.launch_complete=1;c.route_speed_mps=0.8f;c.exit_calibration_m=start_m;
+            v.received_ms=1000;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1000,0.8f,&p,&o));
+            REQUIRE(!o.exit_slow_active); /* Correct preceding yellow is mandatory. */
+            c.tape_count=n;c.exit_calibration_m=start_m-0.001f;
+            v.received_ms=1010;REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1010,0.8f,&p,&o));
+            REQUIRE(!o.exit_slow_active);
+            c.exit_calibration_m=start_m;
+            v.received_ms=1020;REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1020,0.8f,&p,&o));
+            REQUIRE(o.exit_slow_active && o.exit_slow_interval==n);
+            REQUIRE(NEAR(o.requested_speed_mps,0.3f) && NEAR(o.speed_mps,0.792f));
+            for(t=1030;t<=1700;t+=10){v.received_ms=t;REQUIRE(Tracking_UpdateRoute(&c,&v,&v,t,0.3f,&p,&o));}
+            REQUIRE(NEAR(o.speed_mps,0.3f));
+            p.single_speed_mps=0.2f;v.mode=2;v.received_ms=1710;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1710,0.3f,&p,&o));
+            REQUIRE(NEAR(o.requested_speed_mps,0.2f) && NEAR(o.speed_mps,0.292f));
+            v.mode=1;c.exit_calibration_m=start_m-0.01f;v.received_ms=1720;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1720,0.3f,&p,&o));
+            REQUIRE(!o.exit_slow_active && !(c.exit_slow_done&done_bit));
+            c.exit_calibration_m=start_m+0.1f;v.received_ms=1730;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1730,0.3f,&p,&o) && o.exit_slow_active);
+            c.exit_calibration_m=end_m-0.001f;v.received_ms=1735;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1735,0.3f,&p,&o) && o.exit_slow_active);
+            c.exit_calibration_m=end_m;v.received_ms=1740;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1740,0.3f,&p,&o));
+            REQUIRE(!o.exit_slow_active && o.exit_slow_interval==0 && (c.exit_slow_done&done_bit));
+            c.exit_calibration_m=start_m+0.1f;v.received_ms=1750;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,1750,0.3f,&p,&o) && !o.exit_slow_active);
+            /* Confirming the next yellow ends the cap in the same control tick. */
+            Tracking_Reset(&c,&o);c.tape_lane_switch=1;c.tape_count=n;
+            c.exit_calibration_m=start_m+0.1f;c.route_speed_mps=0.3f;c.launch_complete=1;
+            v.received_ms=2000;REQUIRE(Tracking_UpdateRoute(&c,&v,&v,2000,0.3f,&p,&o) && o.exit_slow_active);
+            c.tape_state=TAPE_CONFIRM;c.tape_seen_count=2;c.tape_first_ms=2000;c.tape_last_ms=2050;
+            v.tape_detected=1;v.tape_distance_y_centi_cm=20000;v.received_ms=2120;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,2120,0.3f,&p,&o));
+            REQUIRE(c.tape_count==n+1 && !o.exit_slow_active && (c.exit_slow_done&done_bit));
+            REQUIRE(o.requested_speed_mps>0.3f); /* No one-tick stale cap. */
+            v.tape_detected=0;c.tape_state=TAPE_WAIT;v.received_ms=2130;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,2130,0,&p,&o));
+            REQUIRE(o.speed_mps==0 && !o.exit_slow_active);
+            /* M5 never applies either interval. */
+            Tracking_Reset(&c,&o);c.tape_count=n;c.exit_calibration_m=start_m+0.1f;
+            c.route_speed_mps=0.8f;c.launch_complete=1;v.received_ms=2500;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,2500,0.8f,&p,&o));
+            REQUIRE(!o.exit_slow_active && NEAR(o.speed_mps,0.8f));
+            /* Blind entry and fault stop retain the shared cap and stronger stop. */
+            Tracking_Reset(&c,&o);c.tape_lane_switch=1;c.tape_count=n;c.tape_state=TAPE_RECOVER;
+            c.tape_recover_ms=3000;c.exit_calibration_m=start_m+0.1f;c.route_speed_mps=0.6f;
+            p.tape1_straight_cm=10;v.valid=0;
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,3000,0.6f,&p,&o));
+            REQUIRE(o.exit_slow_active && o.tape_entry_phase==1);
+            for(t=3010;t<=3500;t+=10) REQUIRE(Tracking_UpdateRoute(&c,&v,&v,t,0.3f,&p,&o));
+            REQUIRE(NEAR(o.speed_mps,0.3f) && NEAR(o.requested_speed_mps,0.3f));
+            REQUIRE(Tracking_UpdateRoute(&c,&v,&v,7000,0,&p,&o));
+            REQUIRE(o.exit_slow_active && o.speed_mps==0 && c.tape_state==TAPE_FAULT);
+            v.valid=1;
+        }
+        /* Independent edits allow any slider order; invalid pairs are inactive. */
+        Tracking_Reset(&c,&o);c.tape_lane_switch=1;c.tape_count=1;c.route_speed_mps=0.8f;
+        p.exit_slow_distance_cm=300;p.exit_slow_end_cm=200;c.exit_calibration_m=3.1f;
+        v.received_ms=8000;REQUIRE(Tracking_UpdateRoute(&c,&v,&v,8000,0.8f,&p,&o));
+        REQUIRE(!o.exit_slow_active && !(c.exit_slow_done&1));
+        p.exit_slow_end_cm=400;v.received_ms=8010;
+        REQUIRE(Tracking_UpdateRoute(&c,&v,&v,8010,0.8f,&p,&o) && o.exit_slow_active);
+        p.exit_slow_speed_mps=0.25f;v.received_ms=8020;
+        REQUIRE(Tracking_UpdateRoute(&c,&v,&v,8020,0.8f,&p,&o) && NEAR(o.requested_speed_mps,0.25f));
+        c.exit_calibration_m=4;v.received_ms=8030;
+        REQUIRE(Tracking_UpdateRoute(&c,&v,&v,8030,0.8f,&p,&o) && !o.exit_slow_active);
+        p.exit_slow_end_cm=500;v.received_ms=8040;
+        REQUIRE(Tracking_UpdateRoute(&c,&v,&v,8040,0.8f,&p,&o) && !o.exit_slow_active);
+        /* Real M3 encoder chain, ORESET outside an interval, completion and new RUN. */
+        start_route_fixture();REQUIRE(ModeControl_DebugCommand("ORESET",1));
+        REQUIRE(ModeControl_DebugCommand("TE1S",5));REQUIRE(ModeControl_DebugCommand("TE1E",10));
+        REQUIRE(ModeControl_DebugCommand("TV",0.8f));route_run(1,0,4500,7,1,0);
+        s_tracking.tape_count=1;s_tracking.tape_state=TAPE_PASS;
+        s_tracking.route_speed_mps=0.6f;s_tracking.launch_complete=1;
+        left_count=10000;right_count=-10000;route_run(1,0,4500,7,1,0);
+        REQUIRE(!s_tracking_output.exit_slow_active);
+        route_run(1,0,4500,7,1,0);REQUIRE(s_tracking_output.exit_slow_interval==1);
+        REQUIRE(ModeControl_DebugCommand("ORESET",1));left_count=right_count=0;
+        route_run(1,0,4500,7,1,0);REQUIRE(!s_tracking_output.exit_slow_active);
+        REQUIRE(s_tracking.tape_count==1 && s_tracking.tape_state==TAPE_PASS && !(s_tracking.exit_slow_done&1));
+        left_count=10000;right_count=-10000;route_run(2,0,4500,7,1,0);
+        REQUIRE(s_tracking_output.exit_slow_active);
+        route_run(1,0,4500,7,1,0);REQUIRE(!s_tracking_output.exit_slow_active && (s_tracking.exit_slow_done&1));
+        REQUIRE(ModeControl_DebugCommand("ORESET",1));route_run(2,0,4500,7,1,0);
+        REQUIRE(!s_tracking_output.exit_slow_active);
+        left_count=right_count=0;
+        REQUIRE(ModeControl_DebugCommand("RUN",0));REQUIRE(!s_tracking.exit_slow_done);
+        REQUIRE(ModeControl_DebugCommand("RUN",1));route_run(1,0,4500,7,1,0);
+        REQUIRE(!s_tracking_output.exit_slow_active); /* No first yellow in a new task. */
+        s_tracking.tape_count=1;s_tracking.tape_state=TAPE_PASS;
+        route_run(1,0,4500,7,1,0);REQUIRE(s_tracking_output.exit_slow_active);
+        s_tracking.tape_count=2;s_tracking.tape_state=TAPE_BRAKE;
+        s_tracking.tape_distance_m=TRACK_REAR_TO_FRONT_M+0.07f;
+        route_run(1,0,4500,7,1,0);REQUIRE(s_tracking_output.speed_mps==0 && !s_tracking_output.exit_slow_active);
+    }
     finish(0);
 }

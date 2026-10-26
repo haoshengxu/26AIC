@@ -4,6 +4,31 @@
 
 static AckSpeedPI s_left_pi;
 static AckSpeedPI s_right_pi;
+/* Double totals avoid losing individual encoder increments on longer runs. */
+static double s_odometry_left_m, s_odometry_right_m;
+static double s_odometry_calibration_origin_m;
+static float s_odometry_delta_m;
+
+void Balance_GetOdometry(EncoderOdometry *out)
+{
+    uint32_t mask = __get_PRIMASK();
+    __disable_irq();
+    out->left_m = (float)s_odometry_left_m;
+    out->right_m = (float)s_odometry_right_m;
+    out->centre_m = (float)(0.5 * (s_odometry_left_m + s_odometry_right_m));
+    out->delta_m = s_odometry_delta_m;
+    out->calibration_m = (float)(0.5 * (s_odometry_left_m + s_odometry_right_m) -
+        s_odometry_calibration_origin_m);
+    __set_PRIMASK(mask);
+}
+
+void Balance_ResetCalibrationOdometry(void)
+{
+    uint32_t mask = __get_PRIMASK();
+    __disable_irq();
+    s_odometry_calibration_origin_m = 0.5 * (s_odometry_left_m + s_odometry_right_m);
+    __set_PRIMASK(mask);
+}
 
 void Drive_Motor(float speed_mps, float unused_vy, float steer_rad)
 {
@@ -109,11 +134,17 @@ void Get_Velocity_Form_Encoder(void)
 {
     int left_count = Read_Encoder(2);
     int right_count = Read_Encoder(3);
-    float scale = 0.0f;
+    float scale = 0.0f, left_m, right_m;
     if (Encoder_precision > 0.0f)
-        scale = CONTROL_FREQUENCY * Wheel_perimeter / Encoder_precision;
-    MOTOR_A.Encoder = ACK_ENCODER_A_SIGN * left_count * scale;
-    MOTOR_B.Encoder = ACK_ENCODER_B_SIGN * right_count * scale;
+        scale = Wheel_perimeter / Encoder_precision;
+    /* Consume each hardware delta once. Forward/reverse use the same signs as PI. */
+    left_m = ACK_ENCODER_A_SIGN * left_count * scale;
+    right_m = ACK_ENCODER_B_SIGN * right_count * scale;
+    s_odometry_left_m += left_m;
+    s_odometry_right_m += right_m;
+    s_odometry_delta_m = 0.5f * (left_m + right_m);
+    MOTOR_A.Encoder = left_m * CONTROL_FREQUENCY;
+    MOTOR_B.Encoder = right_m * CONTROL_FREQUENCY;
     MOTOR_C.Encoder = 0.0f;
     MOTOR_D.Encoder = 0.0f;
 }

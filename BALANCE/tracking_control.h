@@ -32,6 +32,10 @@ typedef struct {
     uint32_t tape_entry_blend_ms;
     float tape_entry_last_steer_rad, tape_entry_blend_from_rad;
     float tape_distance_m, tape_resume_travel_m, tape_last_speed_mps;
+    float tape_entry_straight_m, tape_entry_travel_m;
+    uint8_t tape_entry_straight_complete;
+    float exit_calibration_m; /* Same origin as VOFA I123; supplied each M3 tick. */
+    uint8_t exit_slow_active, exit_slow_done, exit_slow_interval; /* done bits: first=1, third=2 */
 } TrackingController;
 
 /* State is the highest-priority active condition; reasons retain all flags. */
@@ -62,6 +66,9 @@ typedef struct {
     uint8_t gain_state; /* 0 straight, 1 curve, 2 unknown, 3 hold, 4 V3 */
     uint8_t tape_entry_phase; /* 0 inactive, 1 straight, 2 right, 3 protected vision, 4 fault */
     float tape_entry_straight_remaining_s;
+    float tape_entry_travel_m, tape_entry_remaining_m;
+    uint8_t exit_slow_active;
+    uint8_t exit_slow_interval; /* 0 inactive, 1 after tape 1, 3 after tape 3 */
 } TrackingOutput;
 
 void Tracking_InputInit(void); /* Before RX interrupts. */
@@ -75,12 +82,16 @@ typedef struct {
     float start_accel_mps2;
     float tape_decel_mps2, tape_gap_cm, tape_wait_s;
     float tape_recover_angle_deg, tape_recover_speed_mps, tape_recover_time_s;
-    float tape_finish_gap_cm;
+    float tape_finish_gap_cm; /* M3; TFDIST remains an alias for TFDIST3. */
+    float tape_finish_gap_m5_cm;
     float finish_approach_speed_mps;
     float local_heading_gain, local_heading_limit_deg;
     float finish_blind_speed_mps, finish_blind_time_s;
     float tape1_straight_s, tape1_right_deg, tape1_speed_mps, tape1_min_s, tape1_max_s;
     float tape3_straight_s, tape3_right_deg, tape3_speed_mps, tape3_min_s, tape3_max_s;
+    float tape1_straight_cm, tape3_straight_cm;
+    float exit_slow_distance_cm, exit_slow_speed_mps;
+    float exit_slow_end_cm, exit_slow3_start_cm, exit_slow3_end_cm;
 } TrackingParameters;
 /* 100 Hz M3: V4 route-aware speeds; V3 retains the legacy X speed rule. */
 uint8_t Tracking_UpdateRoute(TrackingController *controller,
@@ -98,6 +109,9 @@ void Tracking_UartError(void);
 void Tracking_GetInput(TrackingInput *out);
 uint8_t Tracking_CanRun(const TrackingInput *in, uint32_t now);
 void Tracking_Reset(TrackingController *controller, TrackingOutput *out);
+/* Once per encoder read, before UpdateRoute. Signed measured rear-axle delta;
+ * only accumulates during the M3 first/third departure's straight phase. */
+void Tracking_AdvanceOdometry(TrackingController *controller, float delta_m);
 /* Measured chassis speed = mean of the two rear-wheel encoder velocities. */
 uint8_t Tracking_Update(TrackingController *controller, const TrackingInput *in,
                         uint32_t now, float measured_speed, uint8_t imu_valid,

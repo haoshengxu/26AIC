@@ -263,6 +263,12 @@ void ModeControl_Tick10ms(void)
         s_tracking.tape_skip_recover=(s_mode==MODE_CONTROL_VISION_NO_BLIND);
         s_tracking.finish_approach_limit=(s_mode==MODE_CONTROL_VISION_NO_BLIND);
         s_tracking.tape_lane_switch=(s_mode==MODE_CONTROL_VISION_LINE);
+        if(s_mode==MODE_CONTROL_VISION_LINE) {
+            EncoderOdometry odometry;
+            Balance_GetOdometry(&odometry);
+            Tracking_AdvanceOdometry(&s_tracking,odometry.delta_m);
+            s_tracking.exit_calibration_m=odometry.calibration_m;
+        }
         if (!Tracking_UpdateRoute(&s_tracking, &target, &latest_route, now,
                 0.5f*(MOTOR_A.Encoder+MOTOR_B.Encoder), &params, &s_tracking_output)) {
             StopTask(MODE_STATUS_CONTROL_ERROR);
@@ -328,6 +334,11 @@ float ModeControl_DebugAngle(void) { return s_debug_angle; }
 
 uint8_t ModeControl_DebugCommand(const char *key, float value)
 {
+    if (!strcmp(key,"ORESET")) {
+        if (value != 1.0f) return 0;
+        Balance_ResetCalibrationOdometry();
+        return 1;
+    }
     if (!strcmp(key,"TRESET")) {
         if (value != 1.0f || (ModeControl_IsActive() && s_tracking.tape_state >= TAPE_APPROACH)) return 0;
         Tracking_DefaultParameters();

@@ -3,48 +3,56 @@
 #include "ackermann_config.h"
 
 /* User-selected VOFA defaults; runtime changes reset to these on reboot. */
-#define TRACK_BASE_SPEED_MPS        0.90f
+#define TRACK_BASE_SPEED_MPS        0.91f
 /* Legacy V3 slowdown: threshold cm, gain (m/s)/cm, shared curve floor m/s. */
 #define TRACK_TURN_X_THRESHOLD_CM   5.0f
 #define TRACK_TURN_SPEED_GAIN       0.040f
 #define TRACK_TURN_MIN_SPEED_MPS    0.60f
 /* V4 route-aware controller. Curvature uses m^-1, speeds use m/s. */
-#define TRACK_PP_GAIN               1.40f /* curve gain */
-#define TRACK_PP_STRAIGHT_GAIN      0.95f
+#define TRACK_PP_GAIN               1.39f /* curve gain */
+#define TRACK_PP_STRAIGHT_GAIN      0.87f
 #define TRACK_GAIN_CURVE_ENTER      0.82f /* m^-1, independent of speed threshold */
 #define TRACK_GAIN_CURVE_EXIT       0.31f /* hysteresis: exit < enter */
 #define TRACK_GAIN_RATE_PER_S       2.0f
-#define TRACK_CURVE_THRESHOLD       0.82f
+#define TRACK_CURVE_THRESHOLD       0.76f
 #define TRACK_CURVE_SPEED_GAIN      0.16f
 #define TRACK_SINGLE_SPEED_MPS      0.50f
-#define TRACK_FALLBACK_SPEED_MPS    0.40f
+#define TRACK_FALLBACK_SPEED_MPS    0.30f
 #define TRACK_UNKNOWN_SPEED_MPS     0.50f
 #define TRACK_HOLD_SPEED_MPS        0.40f
 #define TRACK_SAT_SPEED_MPS         0.40f
-#define TRACK_ACCEL_MPS2            0.430f
-#define TRACK_START_ACCEL_MPS2      0.80f
+#define TRACK_ACCEL_MPS2            0.395f
+#define TRACK_START_ACCEL_MPS2      0.43f
 #define TRACK_DECEL_MPS2            1.60f
 /* Yellow tape: front clearance, braking plan, confirmed-stop dwell. */
 #define TRACK_TAPE_DECEL_MPS2       0.80f
-#define TRACK_FINISH_APPROACH_SPEED 1.00f
+#define TRACK_FINISH_APPROACH_SPEED 0.56f
 #define TRACK_FINISH_BLIND_SPEED_MPS 0.25f
-#define TRACK_FINISH_BLIND_TIME_S    0.30f
-#define TRACK_TAPE_FINISH_GAP_CM    0.0f
+#define TRACK_FINISH_BLIND_TIME_S    0.00f /* Disabled: stop at finish clearance. */
+#define TRACK_TAPE_FINISH_GAP_CM    9.0f /* M3: TFDIST3 / legacy TFDIST. */
+#define TRACK_TAPE_FINISH_GAP_M5_CM 2.0f /* M5: TFDIST5. */
 #define TRACK_TAPE_GAP_CM           7.0f
 #define TRACK_TAPE_WAIT_S           0.30f
 #define TRACK_TAPE_RECOVER_MS       1000U
 #define TRACK_TAPE_RECOVER_SPEED    0.50f
 #define TRACK_TAPE_RECOVER_LEFT_RAD 0.1745329252f
 #define TRACK_TAPE1_STRAIGHT_S      0.00f
-#define TRACK_TAPE1_RIGHT_DEG       10.2f
+#define TRACK_TAPE1_STRAIGHT_CM     0.00f
+#define TRACK_TAPE1_RIGHT_DEG       8.9f
 #define TRACK_TAPE1_SPEED_MPS       0.58f
-#define TRACK_TAPE1_MIN_S           0.90f
-#define TRACK_TAPE1_MAX_S           2.00f
+#define TRACK_TAPE1_MIN_S           0.57f
+#define TRACK_TAPE1_MAX_S           1.00f
 #define TRACK_TAPE3_STRAIGHT_S      0.60f
+#define TRACK_TAPE3_STRAIGHT_CM     7.00f
 #define TRACK_TAPE3_RIGHT_DEG       15.2f
-#define TRACK_TAPE3_SPEED_MPS       0.32f
-#define TRACK_TAPE3_MIN_S           1.40f
+#define TRACK_TAPE3_SPEED_MPS       0.51f
+#define TRACK_TAPE3_MIN_S           1.00f
 #define TRACK_TAPE3_MAX_S           2.80f
+#define TRACK_EXIT_SLOW_DISTANCE_CM 178.00f
+#define TRACK_EXIT_SLOW_SPEED_MPS   0.30f
+#define TRACK_EXIT_SLOW_END_CM      239.00f
+#define TRACK_EXIT_SLOW3_START_CM   759.00f
+#define TRACK_EXIT_SLOW3_END_CM     830.00f
 #define TRACK_REAR_TO_FRONT_M       0.227f
 #define TRACK_TAPE_CONFIRM_MS       100U
 #define TRACK_TAPE_GAP_MAX_MS       100U

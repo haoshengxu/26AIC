@@ -29,6 +29,16 @@ void SpeedPI_GetState(AckSpeedPI *left, AckSpeedPI *right);
 int Speed_PI_A(float encoder, float target);
 int Speed_PI_B(float encoder, float target);
 void Get_Velocity_Form_Encoder(void);
+typedef struct {
+    float left_m, right_m, centre_m, delta_m, calibration_m;
+} EncoderOdometry;
+/* Signed wheel travel since boot; centre is the rear-axle mean, not world X/Y.
+ * delta_m belongs to the latest encoder read (100 Hz), including while stopped.
+ * calibration_m is signed centre travel from the independently reset origin. */
+void Balance_GetOdometry(EncoderOdometry *out);
+/* Reset only the independent calibration origin to the latest sampled centre.
+ * Safe during motion; does not consume encoder counts or change control travel. */
+void Balance_ResetCalibrationOdometry(void);
 u8 Turn_Off(float voltage);
 float target_limit_float(float value, float low, float high);
 int target_limit_int(int value, int low, int high);

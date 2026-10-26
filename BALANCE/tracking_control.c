@@ -17,9 +17,12 @@ static TrackingParameters parameters = {TRACK_BASE_SPEED_MPS, TRACK_KP,
     TRACK_HOLD_SPEED_MPS, TRACK_SAT_SPEED_MPS, TRACK_ACCEL_MPS2, TRACK_DECEL_MPS2,
     TRACK_PP_STRAIGHT_GAIN, TRACK_GAIN_CURVE_ENTER, TRACK_GAIN_CURVE_EXIT,
     TRACK_START_ACCEL_MPS2, TRACK_TAPE_DECEL_MPS2, TRACK_TAPE_GAP_CM, TRACK_TAPE_WAIT_S,
-    10.0f, TRACK_TAPE_RECOVER_SPEED, TRACK_TAPE_RECOVER_MS*0.001f, TRACK_TAPE_FINISH_GAP_CM, TRACK_FINISH_APPROACH_SPEED, 0.0f, 3.0f, TRACK_FINISH_BLIND_SPEED_MPS, TRACK_FINISH_BLIND_TIME_S,
+    10.0f, TRACK_TAPE_RECOVER_SPEED, TRACK_TAPE_RECOVER_MS*0.001f, TRACK_TAPE_FINISH_GAP_CM, TRACK_TAPE_FINISH_GAP_M5_CM, TRACK_FINISH_APPROACH_SPEED, 0.0f, 3.0f, TRACK_FINISH_BLIND_SPEED_MPS, TRACK_FINISH_BLIND_TIME_S,
     TRACK_TAPE1_STRAIGHT_S, TRACK_TAPE1_RIGHT_DEG, TRACK_TAPE1_SPEED_MPS, TRACK_TAPE1_MIN_S, TRACK_TAPE1_MAX_S,
-    TRACK_TAPE3_STRAIGHT_S, TRACK_TAPE3_RIGHT_DEG, TRACK_TAPE3_SPEED_MPS, TRACK_TAPE3_MIN_S, TRACK_TAPE3_MAX_S};
+    TRACK_TAPE3_STRAIGHT_S, TRACK_TAPE3_RIGHT_DEG, TRACK_TAPE3_SPEED_MPS, TRACK_TAPE3_MIN_S, TRACK_TAPE3_MAX_S,
+    TRACK_TAPE1_STRAIGHT_CM, TRACK_TAPE3_STRAIGHT_CM,
+    TRACK_EXIT_SLOW_DISTANCE_CM, TRACK_EXIT_SLOW_SPEED_MPS,
+    TRACK_EXIT_SLOW_END_CM, TRACK_EXIT_SLOW3_START_CM, TRACK_EXIT_SLOW3_END_CM};
 
 void Tracking_DefaultParameters(void)
 {
@@ -50,6 +53,7 @@ void Tracking_DefaultParameters(void)
     parameters.tape_decel_mps2 = TRACK_TAPE_DECEL_MPS2;
     parameters.tape_gap_cm = TRACK_TAPE_GAP_CM;
     parameters.tape_finish_gap_cm=TRACK_TAPE_FINISH_GAP_CM;
+    parameters.tape_finish_gap_m5_cm=TRACK_TAPE_FINISH_GAP_M5_CM;
     parameters.finish_approach_speed_mps=TRACK_FINISH_APPROACH_SPEED;
     parameters.finish_blind_speed_mps=TRACK_FINISH_BLIND_SPEED_MPS;
     parameters.finish_blind_time_s=TRACK_FINISH_BLIND_TIME_S;
@@ -67,6 +71,13 @@ void Tracking_DefaultParameters(void)
     parameters.tape3_speed_mps = TRACK_TAPE3_SPEED_MPS;
     parameters.tape3_min_s = TRACK_TAPE3_MIN_S;
     parameters.tape3_max_s = TRACK_TAPE3_MAX_S;
+    parameters.tape1_straight_cm = TRACK_TAPE1_STRAIGHT_CM;
+    parameters.tape3_straight_cm = TRACK_TAPE3_STRAIGHT_CM;
+    parameters.exit_slow_distance_cm = TRACK_EXIT_SLOW_DISTANCE_CM;
+    parameters.exit_slow_speed_mps = TRACK_EXIT_SLOW_SPEED_MPS;
+    parameters.exit_slow_end_cm = TRACK_EXIT_SLOW_END_CM;
+    parameters.exit_slow3_start_cm = TRACK_EXIT_SLOW3_START_CM;
+    parameters.exit_slow3_end_cm = TRACK_EXIT_SLOW3_END_CM;
 }
 
 void Tracking_GetParameters(TrackingParameters *out)
@@ -79,7 +90,22 @@ void Tracking_GetParameters(TrackingParameters *out)
 
 uint8_t Tracking_SetParameter(const char *key, float value)
 {
-    if (!strcmp(key,"T1BT") && value >= 0.0f && value <= 5.0f)
+    if ((!strcmp(key,"TEDIST") || !strcmp(key,"TE1S")) && value >= 0.0f && value <= 10000.0f)
+        parameters.exit_slow_distance_cm=value;
+    else if (!strcmp(key,"TE1E") && value >= 0.0f && value <= 10000.0f)
+        parameters.exit_slow_end_cm=value;
+    else if (!strcmp(key,"TE3S") && value >= 0.0f && value <= 10000.0f)
+        parameters.exit_slow3_start_cm=value;
+    else if (!strcmp(key,"TE3E") && value >= 0.0f && value <= 10000.0f)
+        parameters.exit_slow3_end_cm=value;
+    else if (!strcmp(key,"TEV") && value >= 0.05f && value <= ACK_MAX_WHEEL_SPEED_MPS)
+        parameters.exit_slow_speed_mps=value;
+    else if (!strcmp(key,"T1BD") && value >= 0.0f && value <= 200.0f)
+        parameters.tape1_straight_cm=value;
+    else if (!strcmp(key,"T3BD") && value >= 0.0f && value <= 200.0f)
+        parameters.tape3_straight_cm=value;
+    /* Legacy BT commands/readbacks retained; straight control now uses BD only. */
+    else if (!strcmp(key,"T1BT") && value >= 0.0f && value <= 5.0f)
         parameters.tape1_straight_s=value;
     else if (!strcmp(key,"T3BT") && value >= 0.0f && value <= 5.0f)
         parameters.tape3_straight_s=value;
@@ -109,8 +135,10 @@ uint8_t Tracking_SetParameter(const char *key, float value)
         parameters.finish_blind_speed_mps=value;
     else if (!strcmp(key,"TFBT") && value >= 0.0f && value <= 5.0f)
         parameters.finish_blind_time_s=value;
-    else if (!strcmp(key,"TFDIST") && value >= 0.0f && value <= 100.0f)
+    else if ((!strcmp(key,"TFDIST3") || !strcmp(key,"TFDIST")) && value >= 0.0f && value <= 100.0f)
         parameters.tape_finish_gap_cm=value;
+    else if (!strcmp(key,"TFDIST5") && value >= 0.0f && value <= 100.0f)
+        parameters.tape_finish_gap_m5_cm=value;
     else if (!strcmp(key,"TBA") && value >= -20.0f && value <= 20.0f)
         parameters.tape_recover_angle_deg=value;
     else if (!strcmp(key,"TBV") && value >= 0.05f && value <= ACK_MAX_WHEEL_SPEED_MPS)
@@ -231,7 +259,8 @@ static void TapeLimit(TrackingController *c, const VisionTarget *v, uint32_t now
         }
     }
     if(c->tape_state==TAPE_APPROACH || c->tape_state==TAPE_BRAKE) {
-        remaining=c->tape_distance_m-TRACK_REAR_TO_FRONT_M-(c->tape_count>=4U ? p->tape_finish_gap_cm : p->tape_gap_cm)*0.01f;
+        remaining=c->tape_distance_m-TRACK_REAR_TO_FRONT_M-(c->tape_count>=4U ?
+            (c->finish_approach_limit ? p->tape_finish_gap_m5_cm : p->tape_finish_gap_cm) : p->tape_gap_cm)*0.01f;
         a=p->tape_decel_mps2;delay=TRACK_TAPE_DELAY_S;
         /* Solve v*delay + v*v/(2*a) <= remaining. */
         o->tape_speed_limit=sqrtf(a*a*delay*delay+2*a*fmaxf(remaining,0))-a*delay;
@@ -264,6 +293,19 @@ static void TapeEntryBegin(TrackingController *c,const TrackingParameters *p)
     c->tape_entry_speed_mps=first ? p->tape1_speed_mps : p->tape3_speed_mps;
     c->tape_entry_min_s=first ? p->tape1_min_s : p->tape3_min_s;
     c->tape_entry_max_s=first ? p->tape1_max_s : p->tape3_max_s;
+    c->tape_entry_straight_m=0.01f*(first ? p->tape1_straight_cm : p->tape3_straight_cm);
+    c->tape_entry_travel_m=0.0f;
+    c->tape_entry_straight_complete=c->tape_entry_straight_m<=0.0f;
+}
+
+void Tracking_AdvanceOdometry(TrackingController *c,float delta_m)
+{
+    if(!c->tape_entry_active || c->tape_entry_straight_complete ||
+       !Tracking_Finite(delta_m)) return;
+    /* Net signed travel: reverse motion must be made up before entry completes. */
+    c->tape_entry_travel_m+=delta_m;
+    if(c->tape_entry_travel_m>=c->tape_entry_straight_m)
+        c->tape_entry_straight_complete=1;
 }
 
 /* The lane timer runs independently in the TX task. Accept other boundary modes
@@ -305,7 +347,10 @@ static uint8_t TapeEntry(TrackingController *c,const VisionTarget *v,uint32_t no
     elapsed=(uint32_t)(now-c->tape_recover_ms)*0.001f;
     reliable=TapeEntryReliable(c,v,now);
     o->tape_recover_remaining_s=fmaxf(c->tape_entry_max_s-elapsed,0.0f);
-    o->tape_entry_straight_remaining_s=fmaxf(c->tape_entry_straight_s-elapsed,0.0f);
+    /* I112 remains reserved at zero; seconds cannot represent distance remaining. */
+    o->tape_entry_travel_m=c->tape_entry_travel_m;
+    o->tape_entry_remaining_m=c->tape_entry_straight_complete ? 0.0f :
+        fmaxf(c->tape_entry_straight_m-c->tape_entry_travel_m,0.0f);
     if(c->tape_entry_visual && reliable) {
         o->tape_entry_phase=3;
         if(elapsed>=c->tape_entry_max_s) {
@@ -326,7 +371,7 @@ static uint8_t TapeEntry(TrackingController *c,const VisionTarget *v,uint32_t no
         c->tape_state=TAPE_FAULT;c->tape_reliable_count=0;
         c->tape_reliable_ms=now;
     }
-    if(c->tape_reliable_count>=3U && elapsed>=fmaxf(c->tape_entry_straight_s,c->tape_entry_min_s)) {
+    if(c->tape_reliable_count>=3U && c->tape_entry_straight_complete && elapsed>=c->tape_entry_min_s) {
         c->tape_state=TAPE_PASS;c->launch_complete=0;c->tape_entry_visual=1;
         c->tape_entry_blending=1;c->tape_entry_blend_ms=now;
         c->tape_entry_blend_from_rad=c->tape_entry_last_steer_rad;
@@ -339,7 +384,7 @@ static uint8_t TapeEntry(TrackingController *c,const VisionTarget *v,uint32_t no
         c->route_speed_mps=0;o->tape_entry_phase=4;
         c->tape_entry_last_steer_rad=0.0f;
     } else {
-        o->tape_entry_phase=elapsed<c->tape_entry_straight_s ? 1 : 2;
+        o->tape_entry_phase=c->tape_entry_straight_complete ? 2 : 1;
         o->speed_mps=o->requested_speed_mps=c->route_speed_mps=c->tape_entry_speed_mps;
         o->steer_left_rad=o->raw_steer_left_rad=o->tape_entry_phase==1 ? 0.0f :
             -c->tape_entry_right_deg*0.01745329252f;
@@ -440,7 +485,28 @@ static uint8_t TapeRecover(TrackingController *c, const VisionTarget *v,
     return 1;
 }
 
-uint8_t Tracking_UpdateRoute(TrackingController *controller,
+static void ExitSlowUpdate(TrackingController *c,const TrackingParameters *p)
+{
+    uint8_t first_valid=p->exit_slow_distance_cm<p->exit_slow_end_cm;
+    uint8_t third_valid=p->exit_slow3_start_cm<p->exit_slow3_end_cm;
+    c->exit_slow_active=0;c->exit_slow_interval=0;
+    if(!c->tape_lane_switch) return; /* M3 only. */
+    if(c->tape_count>=2U) c->exit_slow_done|=1U;
+    if(c->tape_count>=4U) c->exit_slow_done|=2U;
+    if(!Tracking_Finite(c->exit_calibration_m)) return;
+    /* Invalid pairs are inactive while the two independent sliders are edited. */
+    if(first_valid && c->exit_calibration_m>=p->exit_slow_end_cm*0.01f) c->exit_slow_done|=1U;
+    if(third_valid && c->exit_calibration_m>=p->exit_slow3_end_cm*0.01f) c->exit_slow_done|=2U;
+    if(c->tape_count==1U && !(c->exit_slow_done&1U) && first_valid &&
+       c->exit_calibration_m>=p->exit_slow_distance_cm*0.01f)
+        c->exit_slow_interval=1;
+    if(c->tape_count==3U && !(c->exit_slow_done&2U) && third_valid &&
+       c->exit_calibration_m>=p->exit_slow3_start_cm*0.01f)
+        c->exit_slow_interval=3;
+    c->exit_slow_active=c->exit_slow_interval!=0;
+}
+
+static uint8_t Tracking_UpdateRouteCore(TrackingController *controller,
     const VisionTarget *control, const VisionTarget *latest, uint32_t now,
     float measured_speed, const TrackingParameters *p, TrackingOutput *out)
 {
@@ -452,6 +518,7 @@ uint8_t Tracking_UpdateRoute(TrackingController *controller,
         controller->tape_state==TAPE_FAULT || controller->tape_state==TAPE_FINISH)
         controller->local_heading_rad=0.0f;
     TapeLimit(controller,latest,now,measured_speed,p,out);
+    ExitSlowUpdate(controller,p); /* A newly confirmed next tape ends the cap now. */
     if (TapeWait(controller,latest,now,measured_speed,p,out)) return 1U;
     if (TapeEntry(controller,latest,now,p,out)) return 1U;
     if (TapeRecover(controller,latest,now,p,out)) return 1U;
@@ -585,6 +652,7 @@ uint8_t Tracking_UpdateRoute(TrackingController *controller,
             /* Never accelerate on stale/invalid vision, even during startup. */
             requested = fminf(requested,controller->route_speed_mps);
         }
+        if(controller->exit_slow_active) requested=fminf(requested,p->exit_slow_speed_mps);
         out->requested_speed_mps = requested;
         step = (requested > controller->route_speed_mps ?
             (controller->launch_complete ? p->accel_mps2 : p->start_accel_mps2) :
@@ -617,6 +685,29 @@ uint8_t Tracking_UpdateRoute(TrackingController *controller,
     out->tape_state=controller->tape_state;
     out->valid = 1U;
     return 1U;
+}
+
+uint8_t Tracking_UpdateRoute(TrackingController *controller,
+    const VisionTarget *control,const VisionTarget *latest,uint32_t now,
+    float measured_speed,const TrackingParameters *p,TrackingOutput *out)
+{
+    float previous_speed=controller->route_speed_mps;
+    uint8_t ok;
+    ExitSlowUpdate(controller,p);
+    ok=Tracking_UpdateRouteCore(controller,control,latest,now,measured_speed,p,out);
+    /* Reflect any tape transition in the returned diagnostics. */
+    ExitSlowUpdate(controller,p);
+    out->exit_slow_active=controller->exit_slow_active;
+    out->exit_slow_interval=controller->exit_slow_interval;
+    if(ok && controller->exit_slow_active) {
+        float limit=fmaxf(p->exit_slow_speed_mps,previous_speed-p->decel_mps2*ACK_CONTROL_DT_S);
+        /* Normal pursuit caps its request before ramping. This common bound also
+         * covers V3 and blind entry, while never weakening a lower safety target. */
+        out->requested_speed_mps=fminf(out->requested_speed_mps,p->exit_slow_speed_mps);
+        out->speed_mps=fminf(out->speed_mps,limit);
+        controller->route_speed_mps=out->speed_mps;
+    }
+    return ok;
 }
 
 void Tracking_InputInit(void)

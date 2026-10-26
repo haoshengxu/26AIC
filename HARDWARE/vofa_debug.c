@@ -8,7 +8,7 @@
 #include <string.h>
 
 #define RX_SIZE 256U
-#define CHANNELS 115U
+#define CHANNELS 131U
 static uint8_t rx_byte;
 static volatile uint8_t rx_ring[RX_SIZE];
 static volatile unsigned int rx_head, rx_tail, rx_fault;
@@ -196,7 +196,15 @@ void Vofa_Task(void)
     frame.channels[88] = params.tape_recover_time_s;
     frame.channels[89] = output.tape_count;
     frame.channels[90] = output.tape_recover_remaining_s;
-    frame.channels[91] = params.tape_finish_gap_cm;
+    frame.channels[91] = params.tape_finish_gap_cm; /* M3: TFDIST3 / legacy TFDIST. */
+    frame.channels[122] = params.tape_finish_gap_m5_cm;
+    frame.channels[124] = params.exit_slow_distance_cm;
+    frame.channels[125] = params.exit_slow_speed_mps;
+    frame.channels[126] = output.exit_slow_active;
+    frame.channels[127] = params.exit_slow_end_cm;
+    frame.channels[128] = params.exit_slow3_start_cm;
+    frame.channels[129] = params.exit_slow3_end_cm;
+    frame.channels[130] = output.exit_slow_interval;
     frame.channels[92] = params.finish_approach_speed_mps;
     frame.channels[93] = target.heading_valid;
     frame.channels[94] = target.heading_centi_deg*0.01f;
@@ -220,6 +228,18 @@ void Vofa_Task(void)
     frame.channels[112] = output.tape_entry_straight_remaining_s;
     frame.channels[113] = params.tape1_min_s;
     frame.channels[114] = params.tape3_min_s;
+    frame.channels[115] = params.tape1_straight_cm;
+    frame.channels[116] = params.tape3_straight_cm;
+    frame.channels[117] = output.tape_entry_travel_m*100.0f;
+    frame.channels[118] = output.tape_entry_remaining_m*100.0f;
+    {
+        EncoderOdometry odometry;
+        Balance_GetOdometry(&odometry);
+        frame.channels[119] = odometry.left_m*100.0f;
+        frame.channels[120] = odometry.right_m*100.0f;
+        frame.channels[121] = odometry.centre_m*100.0f;
+        frame.channels[123] = odometry.calibration_m*100.0f;
+    }
     frame.channels[76] = MOTOR_A.Velocity_KP;
     frame.channels[77] = MOTOR_A.Velocity_KI;
     frame.channels[78] = MOTOR_B.Velocity_KP;
