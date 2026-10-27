@@ -22,7 +22,8 @@ static TrackingParameters parameters = {TRACK_BASE_SPEED_MPS, TRACK_KP,
     TRACK_TAPE3_STRAIGHT_S, TRACK_TAPE3_RIGHT_DEG, TRACK_TAPE3_SPEED_MPS, TRACK_TAPE3_MIN_S, TRACK_TAPE3_MAX_S,
     TRACK_TAPE1_STRAIGHT_CM, TRACK_TAPE3_STRAIGHT_CM,
     TRACK_EXIT_SLOW_DISTANCE_CM, TRACK_EXIT_SLOW_SPEED_MPS,
-    TRACK_EXIT_SLOW_END_CM, TRACK_EXIT_SLOW3_START_CM, TRACK_EXIT_SLOW3_END_CM};
+    TRACK_EXIT_SLOW_END_CM, TRACK_EXIT_SLOW3_START_CM, TRACK_EXIT_SLOW3_END_CM,
+    TRACK_FINISH_SLOW_START_CM};
 
 void Tracking_DefaultParameters(void)
 {
@@ -78,6 +79,7 @@ void Tracking_DefaultParameters(void)
     parameters.exit_slow_end_cm = TRACK_EXIT_SLOW_END_CM;
     parameters.exit_slow3_start_cm = TRACK_EXIT_SLOW3_START_CM;
     parameters.exit_slow3_end_cm = TRACK_EXIT_SLOW3_END_CM;
+    parameters.finish_slow_start_cm = TRACK_FINISH_SLOW_START_CM;
 }
 
 void Tracking_GetParameters(TrackingParameters *out)
@@ -129,6 +131,8 @@ uint8_t Tracking_SetParameter(const char *key, float value)
         parameters.local_heading_gain=value;
     else if (!strcmp(key,"THMAX") && value >= 0.0f && value <= 10.0f)
         parameters.local_heading_limit_deg=value;
+    else if (!strcmp(key,"TFSTART") && value >= 0.0f && value <= 10000.0f)
+        parameters.finish_slow_start_cm=value;
     else if (!strcmp(key,"TFV") && value >= 0.05f && value <= ACK_MAX_WHEEL_SPEED_MPS)
         parameters.finish_approach_speed_mps=value;
     else if (!strcmp(key,"TFBV") && value >= 0.0f && value <= ACK_MAX_WHEEL_SPEED_MPS)
@@ -308,14 +312,12 @@ void Tracking_AdvanceOdometry(TrackingController *c,float delta_m)
         c->tape_entry_straight_complete=1;
 }
 
-/* The lane timer runs independently in the TX task. Accept other boundary modes
- * only after that task actually transmits its automatic-mode restoration. */
+/* Any fresh valid target received after departure start counts toward takeover. */
 static uint8_t TapeEntryReliable(const TrackingController *c,const VisionTarget *v,uint32_t now)
 {
     return v->valid && v->link_alive &&
         (uint32_t)(now-v->received_ms)<TRACK_TAPE_GAP_MAX_MS &&
-        (int32_t)(v->received_ms-c->tape_recover_ms)>0 &&
-        (v->mode==3U || Vision_LaneAutoRestored(c->tape_recover_ms,v->received_ms));
+        (int32_t)(v->received_ms-c->tape_recover_ms)>0;
 }
 
 static void TapeEntryCount(TrackingController *c,const VisionTarget *v,uint8_t reliable)
@@ -427,7 +429,7 @@ static uint8_t TapeWait(TrackingController *c,const VisionTarget *v,uint32_t now
         fmaxf(p->tape_wait_s-(uint32_t)(now-c->tape_stop_ms)*0.001f,0) : p->tape_wait_s;
     if(c->tape_dwell_started && o->tape_wait_remaining_s<=0) {
         if(TapeLaneEntry(c)) {
-            c->tape_lane_event=1;
+            c->tape_lane_event=0;
             TapeEntryBegin(c,p);
         }
         c->tape_state=TAPE_RECOVER;c->tape_recover_ms=now;
@@ -504,6 +506,13 @@ static void ExitSlowUpdate(TrackingController *c,const TrackingParameters *p)
        c->exit_calibration_m>=p->exit_slow3_start_cm*0.01f)
         c->exit_slow_interval=3;
     c->exit_slow_active=c->exit_slow_interval!=0;
+}
+
+/* Mileage shares ORESET/I123 in both vision modes and is checked every tick. */
+static uint8_t FinishSlowActive(const TrackingController *c,const TrackingParameters *p)
+{
+    return Tracking_Finite(c->exit_calibration_m) &&
+        c->exit_calibration_m>=p->finish_slow_start_cm*0.01f;
 }
 
 static uint8_t Tracking_UpdateRouteCore(TrackingController *controller,
@@ -653,6 +662,7 @@ static uint8_t Tracking_UpdateRouteCore(TrackingController *controller,
             requested = fminf(requested,controller->route_speed_mps);
         }
         if(controller->exit_slow_active) requested=fminf(requested,p->exit_slow_speed_mps);
+        if(FinishSlowActive(controller,p)) requested=fminf(requested,p->finish_approach_speed_mps);
         out->requested_speed_mps = requested;
         step = (requested > controller->route_speed_mps ?
             (controller->launch_complete ? p->accel_mps2 : p->start_accel_mps2) :
@@ -692,6 +702,7 @@ uint8_t Tracking_UpdateRoute(TrackingController *controller,
     float measured_speed,const TrackingParameters *p,TrackingOutput *out)
 {
     float previous_speed=controller->route_speed_mps;
+    float slow_speed;
     uint8_t ok;
     ExitSlowUpdate(controller,p);
     ok=Tracking_UpdateRouteCore(controller,control,latest,now,measured_speed,p,out);
@@ -699,11 +710,14 @@ uint8_t Tracking_UpdateRoute(TrackingController *controller,
     ExitSlowUpdate(controller,p);
     out->exit_slow_active=controller->exit_slow_active;
     out->exit_slow_interval=controller->exit_slow_interval;
-    if(ok && controller->exit_slow_active) {
-        float limit=fmaxf(p->exit_slow_speed_mps,previous_speed-p->decel_mps2*ACK_CONTROL_DT_S);
+    out->finish_slow_active=FinishSlowActive(controller,p);
+    slow_speed=controller->exit_slow_active ? p->exit_slow_speed_mps : p->speed_mps;
+    if(out->finish_slow_active) slow_speed=fminf(slow_speed,p->finish_approach_speed_mps);
+    if(ok && (controller->exit_slow_active || out->finish_slow_active)) {
+        float limit=fmaxf(slow_speed,previous_speed-p->decel_mps2*ACK_CONTROL_DT_S);
         /* Normal pursuit caps its request before ramping. This common bound also
          * covers V3 and blind entry, while never weakening a lower safety target. */
-        out->requested_speed_mps=fminf(out->requested_speed_mps,p->exit_slow_speed_mps);
+        out->requested_speed_mps=fminf(out->requested_speed_mps,slow_speed);
         out->speed_mps=fminf(out->speed_mps,limit);
         controller->route_speed_mps=out->speed_mps;
     }

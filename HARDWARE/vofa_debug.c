@@ -8,7 +8,7 @@
 #include <string.h>
 
 #define RX_SIZE 256U
-#define CHANNELS 131U
+#define CHANNELS 133U
 static uint8_t rx_byte;
 static volatile uint8_t rx_ring[RX_SIZE];
 static volatile unsigned int rx_head, rx_tail, rx_fault;
@@ -205,6 +205,8 @@ void Vofa_Task(void)
     frame.channels[128] = params.exit_slow3_start_cm;
     frame.channels[129] = params.exit_slow3_end_cm;
     frame.channels[130] = output.exit_slow_interval;
+    frame.channels[131] = params.finish_slow_start_cm;
+    frame.channels[132] = output.finish_slow_active;
     frame.channels[92] = params.finish_approach_speed_mps;
     frame.channels[93] = target.heading_valid;
     frame.channels[94] = target.heading_centi_deg*0.01f;

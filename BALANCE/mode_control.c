@@ -263,10 +263,11 @@ void ModeControl_Tick10ms(void)
         s_tracking.tape_skip_recover=(s_mode==MODE_CONTROL_VISION_NO_BLIND);
         s_tracking.finish_approach_limit=(s_mode==MODE_CONTROL_VISION_NO_BLIND);
         s_tracking.tape_lane_switch=(s_mode==MODE_CONTROL_VISION_LINE);
-        if(s_mode==MODE_CONTROL_VISION_LINE) {
+        {
             EncoderOdometry odometry;
             Balance_GetOdometry(&odometry);
-            Tracking_AdvanceOdometry(&s_tracking,odometry.delta_m);
+            if(s_mode==MODE_CONTROL_VISION_LINE)
+                Tracking_AdvanceOdometry(&s_tracking,odometry.delta_m);
             s_tracking.exit_calibration_m=odometry.calibration_m;
         }
         if (!Tracking_UpdateRoute(&s_tracking, &target, &latest_route, now,
@@ -275,9 +276,7 @@ void ModeControl_Tick10ms(void)
             StartBuzzer(ERROR_BEEP_MS);
             return;
         }
-        if(s_tracking.tape_lane_event) {
-            Vision_RequestLane(5U);s_tracking.tape_lane_event=0;
-        }
+        s_tracking.tape_lane_event=0;
         s_status = MODE_STATUS_RUNNING;
         /* Drive_Motor -> Ack_Kinematics + Ack_ServoPulse; balance.c keeps
          * the positional wheel-speed PI and PWM protection. */

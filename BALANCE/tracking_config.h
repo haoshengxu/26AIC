@@ -3,14 +3,14 @@
 #include "ackermann_config.h"
 
 /* User-selected VOFA defaults; runtime changes reset to these on reboot. */
-#define TRACK_BASE_SPEED_MPS        0.91f
+#define TRACK_BASE_SPEED_MPS        0.95f
 /* Legacy V3 slowdown: threshold cm, gain (m/s)/cm, shared curve floor m/s. */
 #define TRACK_TURN_X_THRESHOLD_CM   5.0f
 #define TRACK_TURN_SPEED_GAIN       0.040f
 #define TRACK_TURN_MIN_SPEED_MPS    0.60f
 /* V4 route-aware controller. Curvature uses m^-1, speeds use m/s. */
 #define TRACK_PP_GAIN               1.39f /* curve gain */
-#define TRACK_PP_STRAIGHT_GAIN      0.87f
+#define TRACK_PP_STRAIGHT_GAIN      0.91f
 #define TRACK_GAIN_CURVE_ENTER      0.82f /* m^-1, independent of speed threshold */
 #define TRACK_GAIN_CURVE_EXIT       0.31f /* hysteresis: exit < enter */
 #define TRACK_GAIN_RATE_PER_S       2.0f
@@ -27,9 +27,10 @@
 /* Yellow tape: front clearance, braking plan, confirmed-stop dwell. */
 #define TRACK_TAPE_DECEL_MPS2       0.80f
 #define TRACK_FINISH_APPROACH_SPEED 0.56f
+#define TRACK_FINISH_SLOW_START_CM  950.00f
 #define TRACK_FINISH_BLIND_SPEED_MPS 0.25f
 #define TRACK_FINISH_BLIND_TIME_S    0.00f /* Disabled: stop at finish clearance. */
-#define TRACK_TAPE_FINISH_GAP_CM    9.0f /* M3: TFDIST3 / legacy TFDIST. */
+#define TRACK_TAPE_FINISH_GAP_CM    8.0f /* M3: TFDIST3 / legacy TFDIST. */
 #define TRACK_TAPE_FINISH_GAP_M5_CM 2.0f /* M5: TFDIST5. */
 #define TRACK_TAPE_GAP_CM           7.0f
 #define TRACK_TAPE_WAIT_S           0.30f
@@ -48,11 +49,11 @@
 #define TRACK_TAPE3_SPEED_MPS       0.51f
 #define TRACK_TAPE3_MIN_S           1.00f
 #define TRACK_TAPE3_MAX_S           2.80f
-#define TRACK_EXIT_SLOW_DISTANCE_CM 178.00f
+#define TRACK_EXIT_SLOW_DISTANCE_CM 157.00f
 #define TRACK_EXIT_SLOW_SPEED_MPS   0.30f
-#define TRACK_EXIT_SLOW_END_CM      239.00f
-#define TRACK_EXIT_SLOW3_START_CM   759.00f
-#define TRACK_EXIT_SLOW3_END_CM     830.00f
+#define TRACK_EXIT_SLOW_END_CM      217.00f
+#define TRACK_EXIT_SLOW3_START_CM   738.00f
+#define TRACK_EXIT_SLOW3_END_CM     799.00f
 #define TRACK_REAR_TO_FRONT_M       0.227f
 #define TRACK_TAPE_CONFIRM_MS       100U
 #define TRACK_TAPE_GAP_MAX_MS       100U

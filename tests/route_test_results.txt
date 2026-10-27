@@ -1,9 +1,5 @@
 "tests/shims/stm32f4xx_hal.h", line 14: Warning:  #2687-D: declaration hides built-in function "__disable_irq"
-
   static __inline void __disable_irq(void) { irq_mask=1; }
-
                        ^
-
 tests/test_route.c: 1 warning, 0 errors
-
-PASS: route; 1741 assertions; case 17/17; failure line 0; signature 0xacce5501
+PASS: route; 1884 assertions; case 18/18; failure line 0; signature 0xacce5501

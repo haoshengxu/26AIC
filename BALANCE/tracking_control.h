@@ -34,7 +34,7 @@ typedef struct {
     float tape_distance_m, tape_resume_travel_m, tape_last_speed_mps;
     float tape_entry_straight_m, tape_entry_travel_m;
     uint8_t tape_entry_straight_complete;
-    float exit_calibration_m; /* Same origin as VOFA I123; supplied each M3 tick. */
+    float exit_calibration_m; /* Same origin as VOFA I123; supplied each M3/M5 tick. */
     uint8_t exit_slow_active, exit_slow_done, exit_slow_interval; /* done bits: first=1, third=2 */
 } TrackingController;
 
@@ -69,6 +69,7 @@ typedef struct {
     float tape_entry_travel_m, tape_entry_remaining_m;
     uint8_t exit_slow_active;
     uint8_t exit_slow_interval; /* 0 inactive, 1 after tape 1, 3 after tape 3 */
+    uint8_t finish_slow_active; /* Current I123 is at/above TFSTART; no latch. */
 } TrackingOutput;
 
 void Tracking_InputInit(void); /* Before RX interrupts. */
@@ -92,6 +93,7 @@ typedef struct {
     float tape1_straight_cm, tape3_straight_cm;
     float exit_slow_distance_cm, exit_slow_speed_mps;
     float exit_slow_end_cm, exit_slow3_start_cm, exit_slow3_end_cm;
+    float finish_slow_start_cm;
 } TrackingParameters;
 /* 100 Hz M3: V4 route-aware speeds; V3 retains the legacy X speed rule. */
 uint8_t Tracking_UpdateRoute(TrackingController *controller,

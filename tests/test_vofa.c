@@ -68,10 +68,10 @@ void test_entry(void)
     huart3.gState = HAL_UART_STATE_READY;
     now_ms = 100; MOTOR_A.Encoder = 1.5f; MOTOR_B.Encoder = -0.5f;
     Vofa_Task();
-    REQUIRE(transmitted_size == 528 && tx_count == 1);
+    REQUIRE(transmitted_size == 536 && tx_count == 1);
     memcpy(&sample, transmitted, 4); REQUIRE(sample == 1.5f);
     memcpy(&sample, transmitted+4, 4); REQUIRE(sample == -0.5f);
-    REQUIRE(transmitted[364] == 0 && transmitted[365] == 0 && transmitted[526] == 0x80 && transmitted[527] == 0x7f);
+    REQUIRE(transmitted[364] == 0 && transmitted[365] == 0 && transmitted[534] == 0x80 && transmitted[535] == 0x7f);
     now_ms = 200; MOTOR_A.Encoder = 9; Vofa_Task();
     REQUIRE(tx_count == 1 && frame.channels[0] == 1.5f);
     huart3.gState = HAL_UART_STATE_READY; Vofa_Task();
@@ -110,7 +110,7 @@ void test_entry(void)
             REQUIRE(rejected==before+4);
         }
         receive_text("TRESET=1;");Tracking_GetParameters(&p);
-        REQUIRE(p.turn_x_threshold_cm==5 && p.turn_speed_gain==0.040f && p.turn_min_speed_mps==0.60f && p.speed_mps==0.91f);
+        REQUIRE(p.turn_x_threshold_cm==5 && p.turn_speed_gain==0.040f && p.turn_min_speed_mps==0.60f && p.speed_mps==0.95f);
     }
     case_id=6;
     receive_text("TPG=1.1;TCTH=0.9;TCK=0.1;TSINGLE=0.24;TFALL=0.19;TUNKNOWN=0.23;THOLD=0.16;TSAT=0.18;TACC=0.4;TDEC=0.9;");
@@ -135,7 +135,7 @@ void test_entry(void)
         REQUIRE(NEAR(frame.channels[60],0.9f,0.0001f) && frame.channels[61]==1.0f && frame.channels[62]==0.5f);
         REQUIRE(NEAR(frame.channels[63],0.9f,0.0001f) && frame.channels[64]==0);
         REQUIRE(NEAR(frame.channels[65],0.6f,0.0001f) && frame.channels[66]==1);
-        REQUIRE(transmitted_size==528 && transmitted[526]==0x80 && transmitted[527]==0x7F);
+        REQUIRE(transmitted_size==536 && transmitted[534]==0x80 && transmitted[535]==0x7F);
         receive_text("RUN=0;");now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
         REQUIRE(frame.channels[42]==0 && frame.channels[32]==0 && frame.channels[46]==0);
     }
@@ -161,7 +161,7 @@ void test_entry(void)
     REQUIRE(NEAR(frame.channels[84],-200,0.001f) && NEAR(frame.channels[85],-20,0.001f));
     memcpy(&sample,transmitted+80*4,4);REQUIRE(sample==MOTOR_A.Motor_Pwm);
     memcpy(&sample,transmitted+85*4,4);REQUIRE(NEAR(sample,-20,0.001f));
-    REQUIRE(transmitted_size==528 && transmitted[526]==0x80 && transmitted[527]==0x7F);
+    REQUIRE(transmitted_size==536 && transmitted[534]==0x80 && transmitted[535]==0x7F);
     advance(10);now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
     REQUIRE(NEAR(frame.channels[81],200,0.001f) && NEAR(frame.channels[82],40,0.001f));
     REQUIRE(NEAR(frame.channels[84],-200,0.001f) && NEAR(frame.channels[85],-40,0.001f));
@@ -253,14 +253,14 @@ void test_entry(void)
         REQUIRE(p.tape_finish_gap_cm==9 && p.tape_finish_gap_m5_cm==16);
         now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
         REQUIRE(frame.channels[91]==9 && frame.channels[122]==16);
-        REQUIRE(transmitted_size==528 && transmitted[526]==0x80 && transmitted[527]==0x7F);
+        REQUIRE(transmitted_size==536 && transmitted[534]==0x80 && transmitted[535]==0x7F);
         memcpy(&sample,transmitted+122*4,4);REQUIRE(sample==16);
         receive_text("TFDIST3=-0.1;TFDIST5=-0.1;TFDIST3=100.1;TFDIST5=100.1;");
         REQUIRE(rejected==before+4);
         receive_text("TRESET=1;");Tracking_GetParameters(&p);
-        REQUIRE(p.tape_finish_gap_cm==9 && p.tape_finish_gap_m5_cm==2);
+        REQUIRE(p.tape_finish_gap_cm==8 && p.tape_finish_gap_m5_cm==2);
         now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
-        REQUIRE(frame.channels[91]==9 && frame.channels[122]==2);
+        REQUIRE(frame.channels[91]==8 && frame.channels[122]==2);
     }
     {
         EncoderOdometry before,after;TrackingController tracking_before;
@@ -304,15 +304,15 @@ void test_entry(void)
         now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
         REQUIRE(NEAR(frame.channels[123],after.calibration_m*100,0.000001f));
         memcpy(&sample,transmitted+123*4,4);REQUIRE(sample==frame.channels[123]);
-        REQUIRE(transmitted_size==528 && transmitted[526]==0x80 && transmitted[527]==0x7f);
+        REQUIRE(transmitted_size==536 && transmitted[534]==0x80 && transmitted[535]==0x7f);
         receive_text("ORESET=1;");now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
         REQUIRE(frame.channels[123]==0);
     }
     {
         TrackingParameters p;float before=rejected;
         receive_text("RUN=0;TRESET=1;");Tracking_GetParameters(&p);
-        REQUIRE(NEAR(p.exit_slow_distance_cm,178.0f,0.0001f) && NEAR(p.exit_slow_speed_mps,0.3f,0.0001f));
-        REQUIRE(p.exit_slow_end_cm==239 && p.exit_slow3_start_cm==759 && p.exit_slow3_end_cm==830);
+        REQUIRE(NEAR(p.exit_slow_distance_cm,157.0f,0.0001f) && NEAR(p.exit_slow_speed_mps,0.3f,0.0001f));
+        REQUIRE(p.exit_slow_end_cm==217 && p.exit_slow3_start_cm==738 && p.exit_slow3_end_cm==799);
         receive_text("TEDIST=180.5;TEV=0.27;");
         now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
         REQUIRE(frame.channels[124]==180.5f && NEAR(frame.channels[125],0.27f,0.0001f));
@@ -328,9 +328,9 @@ void test_entry(void)
         now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
         REQUIRE(frame.channels[126]==1 && frame.channels[124]==10000);
         memcpy(&sample,transmitted+126*4,4);REQUIRE(sample==1);
-        REQUIRE(transmitted_size==528 && transmitted[526]==0x80 && transmitted[527]==0x7f);
+        REQUIRE(transmitted_size==536 && transmitted[534]==0x80 && transmitted[535]==0x7f);
         receive_text("TRESET=1;");Tracking_GetParameters(&p);
-        REQUIRE(NEAR(p.exit_slow_distance_cm,178.0f,0.0001f) && NEAR(p.exit_slow_speed_mps,0.3f,0.0001f));
+        REQUIRE(NEAR(p.exit_slow_distance_cm,157.0f,0.0001f) && NEAR(p.exit_slow_speed_mps,0.3f,0.0001f));
     }
     {
         TrackingParameters p;float before=rejected;
@@ -346,9 +346,28 @@ void test_entry(void)
         now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
         REQUIRE(frame.channels[126]==1 && frame.channels[130]==3);
         memcpy(&sample,transmitted+130*4,4);REQUIRE(sample==3);
-        REQUIRE(transmitted_size==528 && transmitted[526]==0x80 && transmitted[527]==0x7f);
+        REQUIRE(transmitted_size==536 && transmitted[534]==0x80 && transmitted[535]==0x7f);
         receive_text("TRESET=1;");Tracking_GetParameters(&p);
-        REQUIRE(p.exit_slow_distance_cm==178 && p.exit_slow_end_cm==239 && p.exit_slow3_start_cm==759 && p.exit_slow3_end_cm==830);
+        REQUIRE(p.exit_slow_distance_cm==157 && p.exit_slow_end_cm==217 && p.exit_slow3_start_cm==738 && p.exit_slow3_end_cm==799);
+    }
+    {
+        TrackingParameters p;float before=rejected;
+        receive_text("TFSTART=950;TFV=0.56;");
+        now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
+        REQUIRE(frame.channels[131]==950 && NEAR(frame.channels[92],0.56f,0.0001f));
+        receive_text("TFSTART=-0.1;TFSTART=10000.1;TFSTART=nan;TFSTART=inf;");
+        REQUIRE(rejected==before+4);
+        Tracking_GetParameters(&p);REQUIRE(p.finish_slow_start_cm==950);
+        receive_text("TFSTART=0;");Tracking_GetParameters(&p);REQUIRE(p.finish_slow_start_cm==0);
+        receive_text("TFSTART=10000;");Tracking_GetParameters(&p);REQUIRE(p.finish_slow_start_cm==10000);
+        s_tracking_output.finish_slow_active=1;
+        now_ms+=50;huart3.gState=HAL_UART_STATE_READY;Vofa_Task();
+        REQUIRE(frame.channels[131]==10000 && frame.channels[132]==1);
+        memcpy(&sample,transmitted+131*4,4);REQUIRE(sample==10000);
+        memcpy(&sample,transmitted+132*4,4);REQUIRE(sample==1);
+        REQUIRE(transmitted_size==536 && transmitted[532]==0 && transmitted[533]==0 && transmitted[534]==0x80 && transmitted[535]==0x7f);
+        receive_text("TRESET=1;");Tracking_GetParameters(&p);
+        REQUIRE(p.finish_slow_start_cm==950 && NEAR(p.finish_approach_speed_mps,0.56f,0.0001f));
     }
     finish(0);
 }
